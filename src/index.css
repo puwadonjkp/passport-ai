@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-tap-highlight-color: transparent; }
+  body { @apply bg-cream text-ink font-sans antialiased; }
+  h1, h2, h3, h4 { @apply font-display; }
+  :focus-visible { outline: 2px solid #E2622B; outline-offset: 2px; }
+}
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition active:scale-[.97] disabled:opacity-50 disabled:pointer-events-none; }
+  .btn-primary { @apply btn bg-ember text-white hover:bg-ember-600 shadow-[0_6px_18px_-8px_rgba(226,98,43,.8)]; }
+  .btn-dark { @apply btn bg-espresso text-cream hover:bg-espresso-700; }
+  .btn-ghost { @apply btn bg-transparent text-ink hover:bg-cream-200; }
+  .btn-outline { @apply btn border border-cream-300 bg-white text-ink hover:border-ink-muted; }
+  .input { @apply w-full rounded-xl border border-cream-300 bg-white px-4 py-2.5 text-[15px] outline-none transition placeholder:text-ink-muted/60 focus:border-ember focus:ring-4 focus:ring-ember/10; }
+  .label { @apply mb-1.5 block text-[13px] font-medium text-ink-muted; }
+  .card { @apply rounded-2xl border border-cream-200 bg-white shadow-card; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+  .kicker { @apply text-[11px] font-semibold uppercase tracking-[.22em]; }
+}
+
+.dotted-route { background-image: radial-gradient(circle, #E8A33D 1.2px, transparent 1.6px); background-size: 9px 9px; }
+.paper { background-color: #F8F5EF; background-image: radial-gradient(rgba(44,33,25,.05) 1px, transparent 1px); background-size: 16px 16px; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+.leaflet-container { font-family: inherit; }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
