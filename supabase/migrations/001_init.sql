@@ -24,6 +24,7 @@ begin
   return new;
 end;
 $$;
+revoke execute on function public.handle_new_user() from anon, authenticated, public;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
