@@ -15,8 +15,9 @@ async function handleAuthRedirect() {
     sessionStorage.setItem('pai_auth_error', /expired|invalid/i.test(msg) ? 'ลิงก์ยืนยันหมดอายุหรือถูกใช้ไปแล้ว — ถ้าเคยกดยืนยันแล้ว ลองเข้าสู่ระบบได้เลย' : msg)
     history.replaceState(null, '', base + '#/login')
   } else if ((/access_token=|refresh_token=/.test(hash) || /[?&]code=/.test(window.location.search)) && isConfigured) {
+    const recovery = /type=recovery/.test(hash)
     await supabase.auth.getSession()
-    history.replaceState(null, '', window.location.pathname + '#/trips')
+    history.replaceState(null, '', window.location.pathname + (recovery ? '#/reset-password' : '#/trips'))
   }
 }
 

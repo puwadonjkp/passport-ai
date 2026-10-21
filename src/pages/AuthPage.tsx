@@ -17,6 +17,16 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const [info, setInfo] = useState('')
   const isLogin = mode === 'login'
 
+  async function forgot() {
+    if (!email) return setError('กรอกอีเมลก่อน แล้วกด “ลืมรหัสผ่าน?” อีกครั้ง')
+    setBusy(true)
+    setError('')
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname })
+    setBusy(false)
+    if (error) setError(/rate limit/i.test(error.message) ? 'ส่งอีเมลบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่' : error.message)
+    else setInfo('ส่งลิงก์ตั้งรหัสผ่านใหม่ไปที่อีเมลแล้ว (ถ้าอีเมลนี้มีบัญชีอยู่) กรุณาเช็คกล่องจดหมาย')
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
@@ -87,6 +97,11 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
               <label className="label">รหัสผ่าน</label>
               <input className="input" type="password" required minLength={6} autoComplete={isLogin ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="อย่างน้อย 6 ตัวอักษร" />
             </div>
+            {isLogin && (
+              <div className="-mt-2 text-right">
+                <button type="button" onClick={forgot} className="text-sm text-ink-muted hover:text-ember hover:underline">ลืมรหัสผ่าน?</button>
+              </div>
+            )}
             {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-700">{error}</p>}
             {info && <p className="rounded-xl bg-lagoon-100 px-4 py-2.5 text-sm text-lagoon-600">{info}</p>}
             <button className="btn-primary w-full !py-3" disabled={busy}>

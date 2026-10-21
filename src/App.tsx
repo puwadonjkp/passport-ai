@@ -8,6 +8,7 @@ import AuthPage from './pages/AuthPage'
 import Dashboard from './pages/Dashboard'
 import TripPage from './pages/TripPage'
 import PublicPassport from './pages/PublicPassport'
+import ResetPassword from './pages/ResetPassword'
 
 function Private({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/register" element={<PublicOnly><AuthPage mode="register" /></PublicOnly>} />
           <Route path="/trips" element={<Private><Dashboard /></Private>} />
           <Route path="/trips/:tripId/:tab?" element={<Private><TripPage /></Private>} />
+          <Route path="/reset-password" element={<Private><ResetPassword /></Private>} />
           <Route path="/p/:slug" element={<PublicPassport />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

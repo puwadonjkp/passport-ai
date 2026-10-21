@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Loader2, LogOut, Plane, X } from 'lucide-react'
+import { KeyRound, Loader2, LogOut, Plane, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
@@ -56,6 +56,7 @@ export function TopBar({ children }: { children?: ReactNode }) {
         <Logo />
         <div className="flex-1">{children}</div>
         <span className="hidden text-sm text-ink-muted sm:block">สวัสดี, <b className="text-ink">{displayName}</b></span>
+        <Link to="/reset-password" className="btn-ghost !px-3" title="เปลี่ยนรหัสผ่าน"><KeyRound size={18} /></Link>
         <button
           className="btn-ghost !px-3"
           title="ออกจากระบบ"
