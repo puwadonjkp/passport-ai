@@ -9,7 +9,11 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => {
+    const e = sessionStorage.getItem('pai_auth_error') ?? ''
+    sessionStorage.removeItem('pai_auth_error')
+    return e
+  })
   const [info, setInfo] = useState('')
   const isLogin = mode === 'login'
 
