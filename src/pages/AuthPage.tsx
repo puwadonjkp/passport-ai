@@ -34,6 +34,8 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           options: { data: { display_name: name.trim() }, emailRedirectTo: window.location.origin + window.location.pathname },
         })
         if (error) throw error
+        // Supabase ตอบ "สำเร็จ" แต่ไม่ส่งอีเมล ถ้าอีเมลนี้สมัครไว้แล้ว (identities จะว่าง)
+        if (data.user && data.user.identities?.length === 0) throw new Error('already registered')
         if (data.session) nav('/trips')
         else setInfo('สมัครสำเร็จ! กรุณากดยืนยันอีเมลในกล่องจดหมายของคุณ แล้วกลับมาเข้าสู่ระบบ')
       }
@@ -42,7 +44,8 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
       setError(
         /Invalid login/i.test(msg) ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
         : /Email not confirmed/i.test(msg) ? 'ยังไม่ได้ยืนยันอีเมล — กรุณาเช็คกล่องจดหมาย'
-        : /already registered/i.test(msg) ? 'อีเมลนี้สมัครไว้แล้ว ลองเข้าสู่ระบบแทน'
+        : /already registered/i.test(msg) ? 'อีเมลนี้สมัครไว้แล้ว — กด “เข้าสู่ระบบ” ด้านล่างได้เลย'
+        : /rate limit/i.test(msg) ? 'ส่งอีเมลบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่'
         : /Password should be/i.test(msg) ? 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร'
         : msg,
       )
