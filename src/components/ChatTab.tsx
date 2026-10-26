@@ -7,10 +7,13 @@ import { parseExpensesOffline } from '../lib/expenseParser'
 import { dayNumber, fmtMoney, fmtTime, tripToday } from '../lib/format'
 import { imageForAI, prepareImage } from '../lib/image'
 import { uploadPhoto } from '../lib/photos'
+import { upsertRow, upsertRows } from '../lib/rows'
+import { computeBalances, matchMember, settle } from '../lib/settle'
 import { publicUrl, supabase } from '../lib/supabase'
 import type { Category, Expense, ExtractedExpense, Message } from '../lib/types'
 import type { TripData } from '../pages/TripPage'
 import { Spinner } from './ui'
+import { Avatar } from './MembersModal'
 
 interface ChatAIResult {
   reply: string
@@ -21,7 +24,10 @@ interface ChatAIResult {
 
 const SUGGESTIONS = ['ราเมง 2 ชาม 1,800 เยน', 'ค่าแท็กซี่ไปโรงแรม 350 บาท', 'วันนี้ใช้ไปเท่าไหร่แล้ว?', 'เดินเล่นศาลเจ้าฟูชิมิ วิวสวยมาก ⛩️']
 
-export default function ChatTab({ trip, photos, expenses, messages, setMessages, setExpenses, setPhotos }: TripData) {
+export default function ChatTab({ trip, photos, expenses, messages, members, me, setMessages, setExpenses, setPhotos }: TripData) {
+  const group = members.length > 1
+  const nameOf = useMemo(() => new Map(members.map((m) => [m.user_id, m.display_name])), [members])
+  const myName = nameOf.get(me) ?? 'ฉัน'
   const [text, setText] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string>('')
@@ -92,7 +98,7 @@ export default function ChatTab({ trip, photos, expenses, messages, setMessages,
         const prepared = await prepareImage(attached)
         const photo = await uploadPhoto(trip, attached, 'photo', prepared)
         photoId = photo.id
-        setPhotos((ps) => [...ps, photo])
+        setPhotos((ps) => upsertRow(ps, photo))
         aiImage = await imageForAI(prepared.full)
       }
 
@@ -100,7 +106,7 @@ export default function ChatTab({ trip, photos, expenses, messages, setMessages,
       const { data: userMsg, error } = await supabase
         .from('messages').insert({ trip_id: trip.id, role: 'user', content: msg, photo_id: photoId }).select().single()
       if (error) throw error
-      setMessages((m) => [...m, userMsg as Message])
+      setMessages((m) => upsertRow(m, userMsg as Message))
 
       // 3) ให้ AI อ่าน (ถ้าไม่มี AI ใช้ตัวแยกแบบออฟไลน์)
       setStatus('น้องพาสกำลังอ่าน...')
@@ -110,11 +116,16 @@ export default function ChatTab({ trip, photos, expenses, messages, setMessages,
         result = await callAI<ChatAIResult>('chat', {
           message: msg,
           image: aiImage,
-          history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+          history: messages.slice(-10).map((m) => ({ role: m.role, content: group && m.role === 'user' ? `${nameOf.get(m.user_id) ?? '?'}: ${m.content}` : m.content })),
           context: {
             tripName: trip.name, destination: trip.destination, startDate: trip.start_date, endDate: trip.end_date, today,
             homeCurrency: trip.home_currency, budget: trip.budget, spentTotal: Math.round(totals.total), spentToday: Math.round(totals.todayTotal),
             byCategory: Object.fromEntries(Object.entries(totals.byCategory).map(([k, v]) => [k, Math.round(v)])),
+            members: group ? members.map((m) => m.display_name) : [],
+            sender: myName,
+            settlement: group
+              ? settle(computeBalances(expenses, members)).map((t) => `${nameOf.get(t.from)} โอนให้ ${nameOf.get(t.to)} ${t.amount} ${trip.home_currency}`)
+              : [],
           },
         })
       } catch (err) {
@@ -138,6 +149,10 @@ export default function ChatTab({ trip, photos, expenses, messages, setMessages,
           trip_id: trip.id, message_id: userMsg.id, description: x.description, category: x.category,
           amount: x.amount, currency: x.currency, rate, amount_home: amountHome, spent_on: spentOn,
           source: result.image_is_receipt ? 'receipt' : 'chat',
+          paid_by: (group && matchMember(x.paid_by, members)) || me,
+          split_with: group && x.split_with?.length
+            ? [...new Set(x.split_with.map((n) => matchMember(n, members)).filter(Boolean) as string[])]
+            : null,
         })
       }
       let inserted: Expense[] = []
@@ -145,7 +160,7 @@ export default function ChatTab({ trip, photos, expenses, messages, setMessages,
         const { data, error } = await supabase.from('expenses').insert(rows).select()
         if (error) throw error
         inserted = data as Expense[]
-        setExpenses((es) => [...es, ...inserted])
+        setExpenses((es) => upsertRows(es, inserted))
       }
 
       // 5) ข้อความตอบกลับ
@@ -154,7 +169,7 @@ export default function ChatTab({ trip, photos, expenses, messages, setMessages,
         .insert({ trip_id: trip.id, role: 'assistant', content: result.reply, meta: { memory: result.memory, expense_ids: inserted.map((x) => x.id), mode } })
         .select().single()
       if (e2) throw e2
-      setMessages((m) => [...m, botMsg as Message])
+      setMessages((m) => upsertRow(m, botMsg as Message))
     } catch (err) {
       setText(msg)
       alert(`ส่งไม่สำเร็จ: ${(err as Error).message}`)
@@ -196,18 +211,21 @@ export default function ChatTab({ trip, photos, expenses, messages, setMessages,
           {messages.map((m) => {
             const photo = m.photo_id ? photoById.get(m.photo_id) : null
             const items = (m.meta?.expense_ids ?? []).map((id) => expenseById.get(id)).filter(Boolean) as Expense[]
-            const mine = m.role === 'user'
+            const mine = m.role === 'user' && m.user_id === me
+            const friend = m.role === 'user' && !mine
             return (
               <div key={m.id} className={`flex gap-2.5 animate-fade-up ${mine ? 'justify-end' : ''}`}>
-                {!mine && <div className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ember text-sm">🛂</div>}
+                {m.role === 'assistant' && <div className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ember text-sm">🛂</div>}
+                {friend && <div className="mt-1"><Avatar name={nameOf.get(m.user_id) ?? '?'} /></div>}
                 <div className={`max-w-[85%] sm:max-w-[70%] ${mine ? 'items-end' : ''} flex flex-col gap-1.5`}>
+                  {friend && <span className="text-xs font-medium text-ink-muted">{nameOf.get(m.user_id) ?? 'เพื่อนร่วมทริป'}</span>}
                   {photo && (
                     <a href={publicUrl(photo.storage_path)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl ring-1 ring-cream-300">
                       <img src={publicUrl(photo.thumb_path || photo.storage_path)} alt="" className="max-h-60 w-full object-cover" />
                     </a>
                   )}
                   {m.content && (
-                    <div className={`whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${mine ? 'rounded-br-md bg-espresso text-cream' : 'rounded-bl-md bg-white shadow-card'}`}>
+                    <div className={`whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${mine ? 'rounded-br-md bg-espresso text-cream' : friend ? 'rounded-bl-md bg-lagoon-100 text-ink' : 'rounded-bl-md bg-white shadow-card'}`}>
                       {m.content}
                     </div>
                   )}
@@ -218,7 +236,10 @@ export default function ChatTab({ trip, photos, expenses, messages, setMessages,
                           <span className="grid h-8 w-8 place-items-center rounded-lg text-base" style={{ background: CATEGORIES[x.category].color + '1f' }}>{CATEGORIES[x.category].emoji}</span>
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-medium">{x.description}</div>
-                            <div className="text-xs text-ink-muted">{CATEGORIES[x.category].label} · Day {dayNumber(trip.start_date, x.spent_on)}{x.source === 'receipt' && ' · 🧾 ใบเสร็จ'}</div>
+                            <div className="text-xs text-ink-muted">
+                              {CATEGORIES[x.category].label} · Day {dayNumber(trip.start_date, x.spent_on)}{x.source === 'receipt' && ' · 🧾 ใบเสร็จ'}
+                              {group && <> · 💳 {nameOf.get(x.paid_by ?? x.user_id) ?? '?'} จ่าย · {x.split_with?.length ? (x.split_with.length === 1 ? 'ไม่หาร' : `หาร ${x.split_with.length} คน`) : `หาร ${members.length} คน`}</>}
+                            </div>
                           </div>
                           <div className="text-right">
                             <div className="font-semibold">{fmtMoney(Number(x.amount), x.currency, x.amount % 1 ? 2 : 0)}</div>

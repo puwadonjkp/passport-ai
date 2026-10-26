@@ -1,15 +1,21 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Download, Pencil, Plus, Trash2, Wallet } from 'lucide-react'
+import { ArrowRight, Download, Pencil, Plus, Trash2, Wallet } from 'lucide-react'
 import { CATEGORIES, CATEGORY_KEYS, CURRENCIES } from '../lib/constants'
 import { convert } from '../lib/currency'
 import { guessCategory } from '../lib/expenseParser'
 import { addDays, dayNumber, fmtDate, fmtMoney, tripToday } from '../lib/format'
 import { supabase } from '../lib/supabase'
-import type { Category, Expense } from '../lib/types'
+import { computeBalances, settle } from '../lib/settle'
+import type { Category, Expense, Member } from '../lib/types'
 import type { TripData } from '../pages/TripPage'
 import { Empty, Modal, Spinner } from './ui'
+import { Avatar } from './MembersModal'
 
-export default function ExpensesTab({ trip, expenses, setExpenses }: TripData) {
+export default function ExpensesTab({ trip, expenses, setExpenses, members, me }: TripData) {
+  const group = members.length > 1
+  const nameOf = useMemo(() => new Map(members.map((m) => [m.user_id, m.display_name])), [members])
+  const balances = useMemo(() => computeBalances(expenses, members), [expenses, members])
+  const transfers = useMemo(() => settle(balances), [balances])
   const [editing, setEditing] = useState<Expense | 'new' | null>(null)
   const cur = trip.home_currency
   const tripDays = dayNumber(trip.start_date, trip.end_date) ?? 1
@@ -98,6 +104,48 @@ export default function ExpensesTab({ trip, expenses, setExpenses }: TripData) {
         </div>
       )}
 
+      {group && expenses.length > 0 && (
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="card p-5">
+            <h3 className="font-bold">👥 ใครจ่ายไปเท่าไหร่</h3>
+            <ul className="mt-4 space-y-3">
+              {balances.map((b) => (
+                <li key={b.userId} className="flex items-center gap-3 text-sm">
+                  <Avatar name={b.name} size={30} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{b.name}{b.userId === me && <span className="text-ink-muted"> (คุณ)</span>}</div>
+                    <div className="text-xs text-ink-muted">จ่ายไป {fmtMoney(b.paid, cur)} · ส่วนของตัวเอง {fmtMoney(b.share, cur)}</div>
+                  </div>
+                  <span className={`font-semibold ${b.net > 0.5 ? 'text-lagoon' : b.net < -0.5 ? 'text-ember' : 'text-ink-muted'}`}>
+                    {b.net > 0.5 ? `+${fmtMoney(b.net, cur)}` : b.net < -0.5 ? `−${fmtMoney(-b.net, cur)}` : 'เคลียร์แล้ว'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-2xl bg-espresso p-5 text-cream">
+            <h3 className="font-bold">💸 ใครต้องโอนให้ใคร</h3>
+            {transfers.length === 0 ? (
+              <p className="mt-4 text-sm text-cream/60">ทุกคนจ่ายเท่ากันพอดี ไม่ต้องโอนกัน 🎉</p>
+            ) : (
+              <ul className="mt-4 space-y-3">
+                {transfers.map((t, i) => (
+                  <li key={i} className="flex items-center gap-2 rounded-xl bg-white/5 p-3 text-sm ring-1 ring-white/10">
+                    <Avatar name={nameOf.get(t.from) ?? '?'} size={28} />
+                    <span className="truncate">{nameOf.get(t.from)}</span>
+                    <ArrowRight size={16} className="shrink-0 text-saffron" />
+                    <Avatar name={nameOf.get(t.to) ?? '?'} size={28} />
+                    <span className="flex-1 truncate">{nameOf.get(t.to)}</span>
+                    <b className="shrink-0 text-saffron">{fmtMoney(t.amount, cur)}</b>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-4 text-xs text-cream/40">คำนวณให้โอนกันน้อยครั้งที่สุด · รายการที่ไม่ได้ระบุ “หารกับใคร” จะหารเท่ากันทุกคน</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="flex-1 text-lg font-bold">รายการทั้งหมด</h3>
         {expenses.length > 0 && <button className="btn-outline" onClick={exportCsv}><Download size={16} /> CSV</button>}
@@ -119,7 +167,10 @@ export default function ExpensesTab({ trip, expenses, setExpenses }: TripData) {
                   <span className="grid h-9 w-9 place-items-center rounded-xl" style={{ background: CATEGORIES[e.category].color + '1f' }}>{CATEGORIES[e.category].emoji}</span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{e.description}</div>
-                    <div className="text-xs text-ink-muted">{CATEGORIES[e.category].label} · {e.source === 'chat' ? '💬 แชท' : e.source === 'receipt' ? '🧾 ใบเสร็จ' : '✍️ เพิ่มเอง'}</div>
+                    <div className="text-xs text-ink-muted">
+                      {CATEGORIES[e.category].label} · {e.source === 'chat' ? '💬 แชท' : e.source === 'receipt' ? '🧾 ใบเสร็จ' : '✍️ เพิ่มเอง'}
+                      {group && <> · 💳 {nameOf.get(e.paid_by ?? e.user_id) ?? '?'} จ่าย{e.split_with?.length ? ` · หารกับ ${e.split_with.map((id) => nameOf.get(id) ?? '?').join(', ')}` : ''}</>}
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="font-semibold">{fmtMoney(Number(e.amount), e.currency, Number(e.amount) % 1 ? 2 : 0)}</div>
@@ -141,6 +192,8 @@ export default function ExpensesTab({ trip, expenses, setExpenses }: TripData) {
         onClose={() => setEditing(null)}
         defaults={{ currency: expenses[expenses.length - 1]?.currency ?? cur, date: tripToday(trip.start_date, trip.end_date) }}
         trip={trip}
+        members={members}
+        me={me}
         onSaved={(x) => {
           setExpenses((es) => (es.some((e) => e.id === x.id) ? es.map((e) => (e.id === x.id ? x : e)) : [...es, x]))
           setEditing(null)
@@ -150,10 +203,13 @@ export default function ExpensesTab({ trip, expenses, setExpenses }: TripData) {
   )
 }
 
-function ExpenseModal({ open, expense, onClose, onSaved, defaults, trip }: {
+function ExpenseModal({ open, expense, onClose, onSaved, defaults, trip, members, me }: {
   open: boolean; expense: Expense | null; onClose: () => void; onSaved: (e: Expense) => void
-  defaults: { currency: string; date: string }; trip: TripData['trip']
+  defaults: { currency: string; date: string }; trip: TripData['trip']; members: Member[]; me: string
 }) {
+  const allIds = members.map((m) => m.user_id)
+  const [paidBy, setPaidBy] = useState(expense?.paid_by ?? expense?.user_id ?? me)
+  const [split, setSplit] = useState<string[]>(expense?.split_with?.length ? expense.split_with : allIds)
   const [f, setF] = useState({
     description: expense?.description ?? '', category: (expense?.category ?? 'food') as Category,
     amount: expense ? String(expense.amount) : '', currency: expense?.currency ?? defaults.currency, spent_on: expense?.spent_on ?? defaults.date,
@@ -166,7 +222,11 @@ function ExpenseModal({ open, expense, onClose, onSaved, defaults, trip }: {
     setBusy(true)
     const amount = Number(f.amount)
     const { rate, amountHome } = await convert(amount, f.currency, trip.home_currency)
-    const row = { description: f.description.trim(), category: f.category, amount, currency: f.currency, rate, amount_home: amountHome, spent_on: f.spent_on }
+    const everyone = allIds.every((id) => split.includes(id))
+    const row = {
+      description: f.description.trim(), category: f.category, amount, currency: f.currency, rate, amount_home: amountHome, spent_on: f.spent_on,
+      paid_by: paidBy, split_with: everyone || !split.length ? null : split,
+    }
     const q = expense
       ? supabase.from('expenses').update(row).eq('id', expense.id)
       : supabase.from('expenses').insert({ ...row, trip_id: trip.id, source: 'manual' })
@@ -207,6 +267,35 @@ function ExpenseModal({ open, expense, onClose, onSaved, defaults, trip }: {
             ))}
           </div>
         </div>
+        {members.length > 1 && (
+          <>
+            <div>
+              <label className="label">ใครจ่าย</label>
+              <div className="flex flex-wrap gap-2">
+                {members.map((m) => (
+                  <button type="button" key={m.user_id} onClick={() => setPaidBy(m.user_id)}
+                    className={`chip !py-1 !pl-1 !pr-3 text-sm ring-1 ${paidBy === m.user_id ? 'bg-espresso text-cream ring-espresso' : 'bg-white ring-cream-300'}`}>
+                    <Avatar name={m.display_name} size={22} /> {m.display_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="label">หารกับใคร {split.length > 0 && Number(f.amount) > 0 && <span className="font-normal">(คนละ {fmtMoney(Number(f.amount) / split.length, f.currency, 0)})</span>}</label>
+              <div className="flex flex-wrap gap-2">
+                {members.map((m) => {
+                  const on = split.includes(m.user_id)
+                  return (
+                    <button type="button" key={m.user_id} onClick={() => setSplit((s) => (on ? s.filter((x) => x !== m.user_id) : [...s, m.user_id]))}
+                      className={`chip !px-3 !py-1.5 text-sm ring-1 ${on ? 'bg-lagoon text-white ring-lagoon' : 'bg-white text-ink-muted ring-cream-300'}`}>
+                      {on ? '✓' : '+'} {m.display_name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </>
+        )}
         <div>
           <label className="label">วันที่</label>
           <input className="input" type="date" min={trip.start_date} max={trip.end_date} value={f.spent_on} onChange={(e) => setF({ ...f, spent_on: e.target.value })} />

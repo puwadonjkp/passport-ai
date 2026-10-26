@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { ChevronLeft, ChevronRight, ImageUp, MapPin, MapPinOff, Star, Trash2, X } from 'lucide-react'
 import { addDays, dayNumber, fmtDate } from '../lib/format'
 import { deletePhotos, uploadPhoto } from '../lib/photos'
+import { upsertRow } from '../lib/rows'
 import { publicUrl, supabase } from '../lib/supabase'
 import type { Photo } from '../lib/types'
 import type { TripData } from '../pages/TripPage'
@@ -45,7 +46,7 @@ export default function PhotosTab({ trip, photos, setPhotos, setTrip }: TripData
         const f = files[i++]
         try {
           const photo = await uploadPhoto(trip, f)
-          setPhotos((ps) => [...ps, photo].sort((a, b) => (a.taken_at ?? '9').localeCompare(b.taken_at ?? '9')))
+          setPhotos((ps) => upsertRow(ps, photo).sort((a, b) => (a.taken_at ?? '9').localeCompare(b.taken_at ?? '9')))
         } catch (e) {
           state.failed.push(`${f.name}: ${(e as Error).message}`)
         }

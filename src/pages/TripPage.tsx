@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { COMPANIONS } from '../lib/constants'
 import { dayNumber, fmtMoney, fmtRange, todayISO } from '../lib/format'
 import { deleteTripFolder } from '../lib/photos'
+import { upsertRow } from '../lib/rows'
 import type { Expense, Member, Message, PassportRow, Photo, TravelDoc, Trip } from '../lib/types'
 import { useAuth } from '../context/AuthContext'
 import { FullScreenLoader, TopBar } from '../components/ui'
@@ -44,14 +45,6 @@ export type TripData = {
 }
 
 type Row = { id: string }
-/** รวมแถวใหม่จาก realtime เข้ากับ state (กันซ้ำกับแถวที่เพิ่ง insert เอง) */
-function upsertRow<T extends Row>(list: T[], row: T) {
-  const i = list.findIndex((x) => x.id === row.id)
-  if (i === -1) return [...list, row]
-  const copy = [...list]
-  copy[i] = row
-  return copy
-}
 
 export default function TripPage() {
   const { tripId, tab = 'chat' } = useParams()

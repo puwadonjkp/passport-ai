@@ -22,12 +22,13 @@ export function Avatar({ name, size = 32, ring = false }: { name: string; size?:
 
 export default function MembersModal({ open, onClose, trip, members, me, isOwner, setTrip, setMembers }: TripData & { open: boolean; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
+  const canShare = typeof navigator.share === 'function'
   const [myName, setMyName] = useState(members.find((m) => m.user_id === me)?.display_name ?? '')
   const link = trip.invite_code ? `${window.location.origin}${window.location.pathname}#/join/${trip.invite_code}` : ''
 
   async function copy() {
     const text = `มาจดทริป "${trip.name}" ด้วยกันใน Passport AI ✈️\n${link}`
-    if (navigator.share) {
+    if (canShare) {
       try {
         await navigator.share({ title: trip.name, text, url: link })
         return
@@ -67,7 +68,7 @@ export default function MembersModal({ open, onClose, trip, members, me, isOwner
         <p className="mt-1 text-sm text-cream/60">ส่งลิงก์นี้ให้เพื่อน (เพื่อนต้องสมัคร/ล็อกอินก่อน) แล้วทุกคนจะแชทจดรายจ่าย อัปรูป และเห็นสรุปหารเงินร่วมกันแบบเรียลไทม์</p>
         <div className="mt-4 flex gap-2">
           <input readOnly value={link} className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 text-sm text-cream outline-none" onFocus={(e) => e.target.select()} />
-          <button className="btn-primary !px-4" onClick={copy}>{copied ? <Check size={16} /> : navigator.share ? <Share2 size={16} /> : <Copy size={16} />}{copied ? 'คัดลอกแล้ว' : 'ส่ง'}</button>
+          <button className="btn-primary !px-4" onClick={copy}>{copied ? <Check size={16} /> : canShare ? <Share2 size={16} /> : <Copy size={16} />}{copied ? 'คัดลอกแล้ว' : 'ส่ง'}</button>
         </div>
         {isOwner && <button className="mt-3 flex items-center gap-1.5 text-xs text-cream/50 hover:text-cream" onClick={regenerate}><RefreshCw size={12} /> สร้างลิงก์ใหม่ (ยกเลิกลิงก์เดิม)</button>}
       </div>
