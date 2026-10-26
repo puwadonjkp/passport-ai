@@ -4,6 +4,8 @@ import { CATEGORIES, THEMES, dayColor } from '../lib/constants'
 import { fmtCompact, fmtDate, fmtMoney, fmtRange } from '../lib/format'
 import type { PassportData } from '../lib/types'
 import TripMap from './TripMap'
+import { BoardingPass, HotelCard } from './DocumentsTab'
+import { Avatar } from './MembersModal'
 
 /** หน้า Travel Passport — พอร์ตดีไซน์จาก generate_html_passport() ใน app_v022.py + ภาพร่างในสไลด์ */
 export default function PassportView({ data }: { data: PassportData }) {
@@ -136,6 +138,16 @@ export default function PassportView({ data }: { data: PassportData }) {
           </div>
         )}
 
+        {((data.flights?.length ?? 0) > 0 || (data.hotels?.length ?? 0) > 0) && (
+          <div className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-black/5 sm:p-7">
+            <h2 className="text-xl font-bold" style={{ color: 'var(--p)' }}>✈️ ข้อมูลการเดินทาง</h2>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {data.flights?.map((f, i) => <BoardingPass key={`f${i}`} f={f} />)}
+              {data.hotels?.map((h, i) => <HotelCard key={`h${i}`} h={h} />)}
+            </div>
+          </div>
+        )}
+
         <div className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-black/5 sm:p-7">
           <h2 className="text-xl font-bold" style={{ color: 'var(--p)' }}>📝 เรื่องเล่าทริป</h2>
           <div className="mt-4 space-y-6">
@@ -235,6 +247,31 @@ export default function PassportView({ data }: { data: PassportData }) {
             )}
           </div>
         </div>
+
+        {(data.members?.length ?? 0) > 1 && (
+          <div className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-black/5 sm:p-7">
+            <h2 className="text-xl font-bold" style={{ color: 'var(--p)' }}>👥 แก๊งร่วมทริป & หารเงิน</h2>
+            <div className="mt-4 grid gap-5 md:grid-cols-2">
+              <ul className="space-y-3">
+                {data.members!.map((m) => (
+                  <li key={m.name} className="flex items-center gap-3 text-sm">
+                    <Avatar name={m.name} />
+                    <span className="flex-1 font-medium">{m.name}</span>
+                    <span className="text-ink-muted">จ่ายไป <b className="text-ink">{fmtMoney(m.paid, cur)}</b></span>
+                  </li>
+                ))}
+              </ul>
+              <div className="rounded-xl p-4" style={{ background: 'var(--bg)' }}>
+                <p className="text-sm font-semibold">💸 สรุปการโอนคืน</p>
+                {data.settlement?.length ? (
+                  <ul className="mt-2 space-y-1.5 text-sm">
+                    {data.settlement.map((t, i) => <li key={i}>{t.from} → {t.to} <b>{fmtMoney(t.amount, cur)}</b></li>)}
+                  </ul>
+                ) : <p className="mt-2 text-sm text-ink-muted">เคลียร์กันครบแล้ว ไม่มีใครติดเงินใคร 🎉</p>}
+              </div>
+            </div>
+          </div>
+        )}
 
         {data.notes.length > 0 && (
           <details className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-black/5 sm:p-7">

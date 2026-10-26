@@ -12,8 +12,9 @@ import { CATEGORIES, COMPANIONS, TONES } from './constants'
 import { addDays, dayNumber, fmtMoney } from './format'
 import { buildPins, buildVisits, reverseGeocode, routeDistanceKm } from './geo'
 import { imageForAI } from './image'
+import { computeBalances, settle } from './settle'
 import { publicUrl, supabase } from './supabase'
-import type { Category, Expense, Message, PassportData, Photo, Trip, Visit } from './types'
+import type { Category, Expense, FlightInfo, HotelInfo, Member, Message, PassportData, Photo, TravelDoc, Trip, Visit } from './types'
 
 export type Progress = (agent: number, text: string, pct?: number) => void
 
@@ -31,10 +32,14 @@ export async function buildPassport(opts: {
   photos: Photo[]
   expenses: Expense[]
   messages: Message[]
+  documents?: TravelDoc[]
+  members?: Member[]
   userName: string
   onProgress: Progress
 }): Promise<{ data: PassportData; warnings: string[] }> {
   const { trip, expenses, messages, userName, onProgress } = opts
+  const documents = opts.documents ?? []
+  const members = opts.members ?? []
   const warnings: string[] = []
   const tripDays = Math.max(1, dayNumber(trip.start_date, trip.end_date) ?? 1)
   const companion = COMPANIONS[trip.companion] ?? COMPANIONS.friends
@@ -60,6 +65,9 @@ export async function buildPassport(opts: {
       return d && d >= 1 && d <= tripDays ? `[Day ${d}] ${m.meta.memory}` : `${m.meta.memory}`
     })
 
+  const flights: FlightInfo[] = documents.flatMap((d) => d.data.flights ?? []).sort((a, b) => (a.depart ?? '9').localeCompare(b.depart ?? '9'))
+  const hotels: HotelInfo[] = documents.map((d) => d.data.hotel).filter(Boolean).sort((a, b) => (a!.check_in ?? '9').localeCompare(b!.check_in ?? '9')) as HotelInfo[]
+
   // ------------------------------ AGENT 03 (ตัวเลข) ------------------------------
   onProgress(3, 'กำลังวิเคราะห์ค่าใช้จ่ายและพฤติกรรมการเดินทาง...')
   const total = expenses.reduce((s, e) => s + Number(e.amount_home), 0)
@@ -77,6 +85,9 @@ export async function buildPassport(opts: {
     .slice(0, 5)
     .map((e) => ({ description: e.description, amount: Number(e.amount_home), category: e.category, day: dayNumber(trip.start_date, e.spent_on) }))
   const distanceKm = routeDistanceKm(visits)
+  const nameOf = new Map(members.map((m) => [m.user_id, m.display_name]))
+  const balances = members.length > 1 ? computeBalances(expenses, members) : []
+  const transfers = settle(balances).map((t) => ({ from: nameOf.get(t.from) ?? '?', to: nameOf.get(t.to) ?? '?', amount: t.amount }))
   const pins = buildPins(visits)
   const cities: string[] = []
   for (const v of visits) {
@@ -106,6 +117,11 @@ export async function buildPassport(opts: {
         is_highlight: v.hasHighlight,
       })),
       notes: notes.slice(-80),
+      travel: {
+        flights: flights.map((f) => `${f.flight_no ?? ''} ${f.from_city ?? f.from_code} → ${f.to_city ?? f.to_code} ${f.depart ?? ''}`.trim()),
+        hotels: hotels.map((h) => `${h.name ?? ''} (${h.city ?? ''}) ${h.check_in ?? ''} ถึง ${h.check_out ?? ''}`.trim()),
+      },
+      members: members.map((m) => m.display_name),
       expenseSummary: {
         total: Math.round(total),
         budget: trip.budget,
@@ -231,6 +247,10 @@ export async function buildPassport(opts: {
     insights,
     notes,
     aiUsed: Boolean(story),
+    flights,
+    hotels,
+    members: balances.map((b) => ({ name: b.name, paid: b.paid, share: b.share })),
+    settlement: transfers,
     generatedAt: new Date().toISOString(),
   }
 

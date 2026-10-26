@@ -8,7 +8,7 @@ import type { TripData } from '../pages/TripPage'
 import AgentLoader from './AgentLoader'
 import PassportView from './PassportView'
 
-export default function PassportTab({ trip, photos, expenses, messages, passport, setPassport, setTrip, reload }: TripData & { reload: () => void }) {
+export default function PassportTab({ trip, photos, expenses, messages, documents, members, passport, setPassport, setTrip, reload, isOwner }: TripData & { reload: () => void }) {
   const { displayName } = useAuth()
   const [progress, setProgress] = useState<{ agent: number; text: string; pct?: number } | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
@@ -21,6 +21,8 @@ export default function PassportTab({ trip, photos, expenses, messages, passport
     { ok: pics.some((p) => p.lat != null), text: `รูปที่มี GPS ${pics.filter((p) => p.lat != null).length} รูป`, hint: 'ใช้สร้างแผนที่และชื่อสถานที่' },
     { ok: expenses.length > 0, text: `รายจ่ายที่จด ${expenses.length} รายการ`, hint: 'จดผ่านแชทหรือเพิ่มเอง' },
     { ok: memories > 0, text: `บันทึกความทรงจำ ${memories} เรื่อง`, hint: 'เล่าเรื่องในแชท AI จะเอาไปเขียนเรื่องเล่า' },
+    { ok: documents.length > 0, text: `ตั๋ว/การจองที่พัก ${documents.length} รายการ`, hint: 'อัปโหลดในแท็บ “ตั๋ว/ที่พัก” จะได้หน้าการเดินทางใน Passport' },
+    ...(members.length > 1 ? [{ ok: true, text: `เพื่อนร่วมทริป ${members.length} คน`, hint: 'Passport จะมีสรุปหารเงินให้ด้วย' }] : []),
     { ok: photos.some((p) => p.is_highlight), text: `รูปไฮไลต์ ${photos.filter((p) => p.is_highlight).length} รูป`, hint: 'ถ้าไม่เลือก ระบบจะเลือกให้' },
   ]
 
@@ -28,12 +30,12 @@ export default function PassportTab({ trip, photos, expenses, messages, passport
     setWarnings([])
     try {
       const { data, warnings } = await buildPassport({
-        trip, photos: [...photos], expenses, messages, userName: displayName,
+        trip, photos: [...photos], expenses, messages, documents, members, userName: members.length > 1 ? members.map((m) => m.display_name).join(', ') : displayName,
         onProgress: (agent, text, pct) => setProgress({ agent, text, pct }),
       })
       const row = await savePassport(trip, data)
       setPassport(row as PassportRow)
-      setTrip({ ...trip, status: 'ended' })
+      if (isOwner) setTrip({ ...trip, status: 'ended' })
       setWarnings(warnings)
       reload()
     } catch (e) {

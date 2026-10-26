@@ -15,15 +15,20 @@ export default function Dashboard() {
   const [trips, setTrips] = useState<Trip[] | null>(null)
   const [spent, setSpent] = useState<Record<string, number>>({})
   const [passports, setPassports] = useState<Set<string>>(new Set())
+  const [memberCount, setMemberCount] = useState<Record<string, number>>({})
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
     ;(async () => {
-      const [{ data: t }, { data: e }, { data: p }] = await Promise.all([
+      const [{ data: t }, { data: e }, { data: p }, { data: m }] = await Promise.all([
         supabase.from('trips').select('*').order('start_date', { ascending: false }),
         supabase.from('expenses').select('trip_id, amount_home'),
         supabase.from('passports').select('trip_id'),
+        supabase.from('trip_members').select('trip_id'),
       ])
+      const mc: Record<string, number> = {}
+      for (const r of m ?? []) mc[r.trip_id] = (mc[r.trip_id] ?? 0) + 1
+      setMemberCount(mc)
       setTrips((t as Trip[]) ?? [])
       const s: Record<string, number> = {}
       for (const r of e ?? []) s[r.trip_id] = (s[r.trip_id] ?? 0) + Number(r.amount_home)
@@ -96,6 +101,7 @@ export default function Dashboard() {
                       {live && <span className="chip bg-ember text-white"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />กำลังเที่ยว</span>}
                       {upcoming && <span className="chip bg-white/90 text-ink">เร็วๆ นี้</span>}
                       {passports.has(t.id) && <span className="chip bg-saffron text-espresso">🛂 Passport พร้อม</span>}
+                      {(memberCount[t.id] ?? 1) > 1 && <span className="chip bg-white/90 text-ink">👥 {memberCount[t.id]}</span>}
                     </div>
                     <div className="absolute bottom-3 left-4 right-4 text-white">
                       <h3 className="truncate text-xl font-bold">{t.name}</h3>
