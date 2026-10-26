@@ -190,14 +190,14 @@ export default function DocumentsTab({ trip, documents, setDocuments, setExpense
 export function BoardingPass({ f, compact = false }: { f: FlightInfo; compact?: boolean }) {
   return (
     <div className="relative flex overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-cream-200">
-      <div className="flex-1 p-4 sm:p-5">
+      <div className="min-w-0 flex-1 p-3 sm:p-5">
         <div className="flex items-center justify-between text-xs text-ink-muted">
           <span className="font-semibold uppercase tracking-wider">{f.airline ?? 'Boarding Pass'}</span>
           <span className="font-mono font-bold text-ink">{f.flight_no ?? ''}</span>
         </div>
         <div className="mt-3 flex items-center gap-3">
           <div className="min-w-0">
-            <div className="font-mono text-3xl font-bold leading-none text-espresso">{f.from_code ?? '???'}</div>
+            <div className="font-mono text-2xl font-bold leading-none text-espresso sm:text-3xl">{f.from_code ?? '???'}</div>
             <div className="truncate text-xs text-ink-muted">{f.from_city ?? ''}</div>
           </div>
           <div className="relative flex-1">
@@ -205,17 +205,17 @@ export function BoardingPass({ f, compact = false }: { f: FlightInfo; compact?: 
             <Plane size={18} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 text-ember" />
           </div>
           <div className="min-w-0 text-right">
-            <div className="font-mono text-3xl font-bold leading-none text-espresso">{f.to_code ?? '???'}</div>
+            <div className="font-mono text-2xl font-bold leading-none text-espresso sm:text-3xl">{f.to_code ?? '???'}</div>
             <div className="truncate text-xs text-ink-muted">{f.to_city ?? ''}</div>
           </div>
         </div>
-        <div className="mt-3 flex justify-between text-sm">
+        <div className="mt-3 flex justify-between gap-2 text-xs sm:text-sm">
           <span><b>{time(f.depart)}</b> <span className="text-ink-muted">{day(f.depart)}</span></span>
           <span><b>{time(f.arrive)}</b> <span className="text-ink-muted">{day(f.arrive)}</span></span>
         </div>
       </div>
       {!compact && (
-        <div className="relative w-28 shrink-0 border-l-2 border-dashed border-cream-300 bg-ember p-4 text-white sm:w-32">
+        <div className="relative w-24 shrink-0 border-l-2 border-dashed border-cream-300 bg-ember p-3 text-white sm:w-32 sm:p-4">
           <span className="absolute -left-[9px] -top-2 h-4 w-4 rounded-full bg-cream" />
           <span className="absolute -bottom-2 -left-[9px] h-4 w-4 rounded-full bg-cream" />
           <div className="text-[10px] uppercase tracking-wider text-white/70">Seat</div>
