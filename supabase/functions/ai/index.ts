@@ -5,6 +5,7 @@
 //   action = "chat"     -> Chat Note Agent: อ่านข้อความ/รูปใบเสร็จ แยกรายจ่าย + บันทึกความทรงจำ
 //   action = "story"    -> Agent 02/03: เขียนเรื่องเล่ารายวัน ชื่อทริป คำโปรย และ insight ค่าใช้จ่าย
 //   action = "caption"  -> Agent 02 (Vision): มองรูปไฮไลต์แล้วเขียนแคปชัน
+//   action = "document" -> Agent 01: อ่าน Boarding Pass / E-Itinerary / ใบจองโรงแรม (รูปหรือ PDF)
 //
 // Secrets (ตั้งใน Supabase Dashboard > Edge Functions > Secrets):
 //   GEMINI_API_KEY    (ฟรี จาก Google AI Studio)  หรือ  ANTHROPIC_API_KEY
@@ -51,7 +52,8 @@ async function callGemini(system: string, user: string, image?: Image, wantJson 
 
 async function callClaude(system: string, user: string, image?: Image, maxTokens = 2048): Promise<string> {
   const content: Record<string, unknown>[] = []
-  if (image) content.push({ type: 'image', source: { type: 'base64', media_type: image.mime, data: image.base64 } })
+  if (image?.mime === 'application/pdf') content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image.base64 } })
+  else if (image) content.push({ type: 'image', source: { type: 'base64', media_type: image.mime, data: image.base64 } })
   content.push({ type: 'text', text: user })
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -97,9 +99,13 @@ const CHAT_SYSTEM = `คุณคือ "น้องพาส" ผู้ช่�
 - description สั้นๆ เป็นภาษาไทย ไม่เกิน 6 คำ
 - ห้ามสร้างรายจ่ายที่ผู้ใช้ไม่ได้พูดถึง ถ้าไม่มีรายจ่ายให้ส่ง expenses เป็น []
 - ถ้าเป็นรูปใบเสร็จ ให้ตั้ง image_is_receipt = true แล้วอ่านยอดรวมสุทธิ (Total) เป็น 1 รายการ เว้นแต่ใบเสร็จแยกหมวดชัดเจน
+ทริปที่ไปกันหลายคน (ดู "สมาชิกทริป"):
+- paid_by = ชื่อสมาชิกที่เป็นคนจ่าย ถ้าไม่ได้บอกให้เป็น null (ระบบจะถือว่าผู้ส่งข้อความเป็นคนจ่าย) ต้องสะกดตรงกับรายชื่อสมาชิก
+- split_with = รายชื่อสมาชิกที่หารรายการนี้ ถ้าไม่ได้บอกให้เป็น null (หารเท่ากันทุกคน) ถ้าบอกว่า "ของฉันคนเดียว/ไม่ต้องหาร" ให้ใส่แค่ชื่อคนจ่าย
+- ถ้าถามว่าใครต้องโอนให้ใคร ให้ตอบจาก "ยอดคงค้าง" ที่ให้ไว้เท่านั้น
 reply: ข้อความตอบกลับสั้นๆ ยืนยันสิ่งที่บันทึกไว้ (ไม่ต้องแปลงสกุลเงินเอง ระบบจะแปลงให้)
 ตอบเป็น JSON เท่านั้น ตาม schema:
-{"reply": string, "expenses": [{"description": string, "category": string, "amount": number, "currency": string, "date": "YYYY-MM-DD"}], "memory": string | null, "image_is_receipt": boolean}`
+{"reply": string, "expenses": [{"description": string, "category": string, "amount": number, "currency": string, "date": "YYYY-MM-DD", "paid_by": string | null, "split_with": string[] | null}], "memory": string | null, "image_is_receipt": boolean}`
 
 async function handleChat(p: Record<string, any>) {
   const ctx = p.context ?? {}
@@ -111,6 +117,9 @@ async function handleChat(p: Record<string, any>) {
 - ใช้ไปแล้วรวม: ${ctx.spentTotal ?? 0} ${ctx.homeCurrency ?? 'THB'}
 - แยกตามหมวด: ${JSON.stringify(ctx.byCategory ?? {})}
 - วันนี้ใช้ไป: ${ctx.spentToday ?? 0} ${ctx.homeCurrency ?? 'THB'}
+- สมาชิกทริป: ${(ctx.members ?? []).join(', ') || '(ไปคนเดียว)'}
+- ผู้ส่งข้อความนี้: ${ctx.sender ?? '-'}
+- ยอดคงค้าง (ใครต้องโอนให้ใคร): ${JSON.stringify(ctx.settlement ?? [])}
 
 บทสนทนาก่อนหน้า:
 ${history || '(ยังไม่มี)'}
@@ -133,6 +142,8 @@ ${history || '(ยังไม่มี)'}
         amount: e.amount,
         currency: String(e.currency ?? ctx.homeCurrency ?? 'THB').toUpperCase().slice(0, 3),
         date: typeof e.date === 'string' ? e.date : ctx.today,
+        paid_by: typeof e.paid_by === 'string' ? e.paid_by : null,
+        split_with: Array.isArray(e.split_with) ? e.split_with.filter((x: unknown) => typeof x === 'string') : null,
       })),
   }
 }
@@ -171,6 +182,11 @@ ${JSON.stringify(p.visits ?? [], null, 1)}
 บันทึกความทรงจำจากแชท (ผู้ใช้เล่าเอง):
 ${JSON.stringify(p.notes ?? [], null, 1)}
 
+เที่ยวบินและที่พัก (จากเอกสารที่อัปโหลด):
+${JSON.stringify(p.travel ?? {}, null, 1)}
+
+ผู้ร่วมทริป: ${(p.members ?? []).join(', ') || '-'}
+
 สรุปค่าใช้จ่าย (${p.homeCurrency}):
 ${JSON.stringify(p.expenseSummary ?? {}, null, 1)}
 
@@ -198,6 +214,40 @@ async function handleCaption(p: Record<string, any>) {
   return { provider, caption }
 }
 
+// ---------------------------------------------------------------------
+// TRAVEL DOCUMENT READER — Boarding Pass / E-Itinerary / ใบจองโรงแรม
+// ---------------------------------------------------------------------
+const DOC_SYSTEM = `คุณอ่านเอกสารการเดินทาง (บอร์ดดิ้งพาส, E-Ticket/E-Itinerary ของสายการบิน, ใบยืนยันการจองโรงแรม) แล้วดึงข้อมูลเป็น JSON เท่านั้น
+- kind: "flight" ถ้าเป็นตั๋ว/บอร์ดดิ้งพาส, "hotel" ถ้าเป็นการจองที่พัก, "other" ถ้าไม่ใช่ทั้งสองแบบ
+- flights: ทุกเที่ยวบินในเอกสาร (ขาไป/ขากลับ/ต่อเครื่อง) เวลาเป็นเวลาท้องถิ่นของสนามบินนั้น รูปแบบ YYYY-MM-DDTHH:mm
+- from_code/to_code เป็นรหัสสนามบิน IATA 3 ตัว, from_city/to_city เป็นชื่อเมืองภาษาไทย
+- hotel: check_in/check_out รูปแบบ YYYY-MM-DD
+- total_price: ราคารวมที่จ่ายจริงถ้ามีในเอกสาร (amount เป็นตัวเลข, currency เป็นรหัส ISO 4217) ถ้าไม่มีให้เป็น null
+- summary: สรุปภาษาไทย 1 ประโยค เช่น "เที่ยวบิน TG622 กรุงเทพ → โอซาก้า 19 ต.ค."
+- ฟิลด์ไหนไม่มีในเอกสารให้เป็น null ห้ามเดา
+Schema:
+{"kind": "flight"|"hotel"|"other", "summary": string,
+ "flights": [{"airline": string|null, "flight_no": string|null, "from_code": string|null, "from_city": string|null, "to_code": string|null, "to_city": string|null, "depart": string|null, "arrive": string|null, "seat": string|null, "gate": string|null, "class": string|null, "passenger": string|null, "booking_ref": string|null}],
+ "hotel": {"name": string|null, "address": string|null, "city": string|null, "check_in": string|null, "check_out": string|null, "nights": number|null, "room": string|null, "guests": number|null, "booking_ref": string|null} | null,
+ "total_price": {"amount": number, "currency": string} | null}`
+
+async function handleDocument(p: Record<string, any>) {
+  const { text, provider } = await callAI(DOC_SYSTEM, 'อ่านเอกสารนี้แล้วตอบเป็น JSON ตาม schema', {
+    image: { base64: p.file.base64, mime: p.file.mime ?? 'image/jpeg' },
+    maxTokens: 2048,
+  })
+  const data = parseJson(text)
+  const kind = ['flight', 'hotel', 'other'].includes(data.kind as string) ? data.kind : 'other'
+  return {
+    provider,
+    kind,
+    summary: typeof data.summary === 'string' ? data.summary : '',
+    flights: Array.isArray(data.flights) ? data.flights : [],
+    hotel: data.hotel && typeof data.hotel === 'object' ? data.hotel : null,
+    total_price: data.total_price && typeof (data.total_price as any).amount === 'number' ? data.total_price : null,
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
@@ -207,6 +257,7 @@ Deno.serve(async (req) => {
     if (action === 'chat') return json(await handleChat(payload))
     if (action === 'story') return json(await handleStory(payload))
     if (action === 'caption') return json(await handleCaption(payload))
+    if (action === 'document') return json(await handleDocument(payload))
     return json({ error: 'unknown_action' }, 400)
   } catch (e) {
     console.error(e)
