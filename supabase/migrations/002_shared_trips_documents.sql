@@ -43,7 +43,6 @@ begin
   return new;
 end;
 $$;
-drop trigger if exists trips_add_owner on public.trips;
 create trigger trips_add_owner after insert on public.trips for each row execute function public.add_trip_owner();
 
 insert into public.trip_members (trip_id, user_id, role, display_name, joined_at)
@@ -72,23 +71,9 @@ create table if not exists public.documents (
 create index if not exists documents_trip_idx on public.documents (trip_id, created_at);
 alter table public.documents enable row level security;
 
--- ---------- RLS: เปลี่ยนจาก "เจ้าของเท่านั้น" เป็น "สมาชิกทริป" ----------
-do $$
-declare t text; a text;
-begin
-  foreach t in array array['trips', 'photos', 'messages', 'expenses', 'passports'] loop
-    foreach a in array array['select', 'insert', 'update', 'delete'] loop
-      execute format('drop policy if exists "own %1$s %2$s" on public.%1$s', t, a);
-    end loop;
-  end loop;
-end $$;
-
+-- ---------- RLS: เพิ่มสิทธิ์ "สมาชิกทริป" (policy เดิมแบบเจ้าของเท่านั้นยังอยู่ เป็นสับเซตของสิทธิ์ใหม่) ----------
 create policy "trips member select" on public.trips for select to authenticated
   using (user_id = (select auth.uid()) or public.is_trip_member(id));
-create policy "trips owner insert" on public.trips for insert to authenticated with check (user_id = (select auth.uid()));
-create policy "trips owner update" on public.trips for update to authenticated
-  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
-create policy "trips owner delete" on public.trips for delete to authenticated using (user_id = (select auth.uid()));
 
 do $$
 declare t text;
@@ -106,7 +91,6 @@ create policy "passports member insert" on public.passports for insert to authen
   with check (user_id = (select auth.uid()) and public.is_trip_member(trip_id));
 create policy "passports member update" on public.passports for update to authenticated
   using (public.is_trip_member(trip_id)) with check (public.is_trip_member(trip_id));
-create policy "passports owner delete" on public.passports for delete to authenticated using (public.is_trip_owner(trip_id));
 
 create policy "members see members" on public.trip_members for select to authenticated using (public.is_trip_member(trip_id));
 create policy "members rename self" on public.trip_members for update to authenticated
@@ -124,7 +108,6 @@ begin
   return new;
 end;
 $$;
-drop trigger if exists documents_trip_owner on public.documents;
 create trigger documents_trip_owner before insert or update of trip_id on public.documents
   for each row execute function public.assert_trip_owner();
 
