@@ -36,7 +36,8 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        nav('/trips')
+        const pending = sessionStorage.getItem('pai_pending_join')
+        nav(pending ? `/join/${pending}` : '/trips')
       } else {
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -46,7 +47,10 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         if (error) throw error
         // Supabase ตอบ "สำเร็จ" แต่ไม่ส่งอีเมล ถ้าอีเมลนี้สมัครไว้แล้ว (identities จะว่าง)
         if (data.user && data.user.identities?.length === 0) throw new Error('already registered')
-        if (data.session) nav('/trips')
+        if (data.session) {
+          const pending = sessionStorage.getItem('pai_pending_join')
+            nav(pending ? `/join/${pending}` : '/trips')
+        }
         else setInfo('สมัครสำเร็จ! กรุณากดยืนยันอีเมลในกล่องจดหมายของคุณ แล้วกลับมาเข้าสู่ระบบ')
       }
     } catch (err) {
@@ -80,6 +84,7 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         <div className="mb-10 md:hidden"><Logo /></div>
         <div className="mx-auto w-full max-w-sm">
           <h1 className="text-3xl font-bold">{isLogin ? 'ยินดีต้อนรับกลับมา 👋' : 'สร้างบัญชีใหม่ ✈️'}</h1>
+          {sessionStorage.getItem('pai_pending_join') && <p className="mt-3 rounded-xl bg-ember-100 px-4 py-2.5 text-sm text-ember-600">✈️ มีเพื่อนชวนคุณร่วมทริป — {isLogin ? 'เข้าสู่ระบบ' : 'สมัคร'}ก่อน แล้วระบบจะพาไปหน้าเข้าร่วมทริปให้</p>}
           <p className="mt-2 text-sm text-ink-muted">{isLogin ? 'เข้าสู่ระบบเพื่อดูทริปและ Passport ของคุณ' : 'ใช้เวลาไม่ถึงนาที แล้วเริ่มจดทริปแรกได้เลย'}</p>
 
           <form onSubmit={submit} className="mt-8 space-y-4">

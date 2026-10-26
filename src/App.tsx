@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import TripPage from './pages/TripPage'
 import PublicPassport from './pages/PublicPassport'
 import ResetPassword from './pages/ResetPassword'
+import JoinPage, { PENDING_JOIN_KEY } from './pages/JoinPage'
 
 function Private({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
@@ -20,7 +21,12 @@ function Private({ children }: { children: ReactNode }) {
 function PublicOnly({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
   if (loading) return <FullScreenLoader />
-  if (session) return <Navigate to="/trips" replace />
+  if (session) {
+    // ถ้ามาจากลิงก์ชวนเพื่อนก่อนล็อกอิน ให้กลับไปหน้าเข้าร่วมทริป
+    const pending = sessionStorage.getItem(PENDING_JOIN_KEY)
+    if (pending) return <Navigate to={`/join/${pending}`} replace />
+    return <Navigate to="/trips" replace />
+  }
   return <>{children}</>
 }
 
@@ -36,6 +42,7 @@ export default function App() {
           <Route path="/trips" element={<Private><Dashboard /></Private>} />
           <Route path="/trips/:tripId/:tab?" element={<Private><TripPage /></Private>} />
           <Route path="/reset-password" element={<Private><ResetPassword /></Private>} />
+          <Route path="/join/:code" element={<JoinPage />} />
           <Route path="/p/:slug" element={<PublicPassport />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

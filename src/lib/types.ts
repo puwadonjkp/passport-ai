@@ -14,7 +14,68 @@ export interface Trip {
   theme: string
   status: 'active' | 'ended'
   cover_photo_path: string | null
+  invite_code: string | null
   created_at: string
+}
+
+export interface Member {
+  trip_id: string
+  user_id: string
+  role: 'owner' | 'member'
+  display_name: string
+  joined_at: string
+}
+
+export interface FlightInfo {
+  airline: string | null
+  flight_no: string | null
+  from_code: string | null
+  from_city: string | null
+  to_code: string | null
+  to_city: string | null
+  depart: string | null
+  arrive: string | null
+  seat: string | null
+  gate?: string | null
+  class?: string | null
+  passenger: string | null
+  booking_ref: string | null
+}
+
+export interface HotelInfo {
+  name: string | null
+  address: string | null
+  city: string | null
+  check_in: string | null
+  check_out: string | null
+  nights: number | null
+  room?: string | null
+  guests?: number | null
+  booking_ref: string | null
+}
+
+export interface TravelDoc {
+  id: string
+  trip_id: string
+  user_id: string
+  kind: 'flight' | 'hotel' | 'other'
+  storage_path: string | null
+  original_name: string | null
+  mime: string | null
+  data: {
+    summary?: string
+    flights?: FlightInfo[]
+    hotel?: HotelInfo | null
+    total_price?: { amount: number; currency: string } | null
+    expense_id?: string | null
+  }
+  created_at: string
+}
+
+export interface Transfer {
+  from: string
+  to: string
+  amount: number
 }
 
 export interface Photo {
@@ -37,6 +98,7 @@ export interface Photo {
 export interface Message {
   id: string
   trip_id: string
+  user_id: string
   role: 'user' | 'assistant'
   content: string
   photo_id: string | null
@@ -61,6 +123,9 @@ export interface Expense {
   amount_home: number
   spent_on: string
   source: 'chat' | 'manual' | 'receipt'
+  paid_by: string | null
+  split_with: string[] | null
+  user_id: string
   created_at: string
 }
 
@@ -70,6 +135,8 @@ export interface ExtractedExpense {
   amount: number
   currency: string
   date: string
+  paid_by?: string | null
+  split_with?: string[] | null
 }
 
 export interface PassportRow {
@@ -144,4 +211,9 @@ export interface PassportData {
   notes: string[]
   aiUsed: boolean
   generatedAt: string
+  // เพิ่มใน v1.1 — Passport เก่าจะไม่มีฟิลด์เหล่านี้
+  flights?: FlightInfo[]
+  hotels?: HotelInfo[]
+  members?: { name: string; paid: number; share: number }[]
+  settlement?: { from: string; to: string; amount: number }[]
 }
