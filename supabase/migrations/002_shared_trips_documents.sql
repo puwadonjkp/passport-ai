@@ -156,3 +156,4 @@ alter publication supabase_realtime add table public.messages, public.expenses, 
 
 revoke execute on function public.is_trip_member(uuid), public.is_trip_member_text(text), public.is_trip_owner(uuid) from public, anon;
 grant execute on function public.is_trip_member(uuid), public.is_trip_member_text(text), public.is_trip_owner(uuid) to authenticated;
+revoke execute on function public.assert_trip_owner() from public, anon, authenticated;
