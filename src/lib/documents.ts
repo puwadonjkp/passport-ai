@@ -1,6 +1,6 @@
 // Agent 01 (เอกสารเดินทาง): อัปโหลด Boarding Pass / E-Itinerary / ใบจองโรงแรม แล้วให้ AI อ่านข้อมูลเที่ยวบินและที่พัก
 import { AIUnavailable, callAI } from './ai'
-import { blobToBase64, imageForAI, isHeic } from './image'
+import { blobToBase64, imageForAI, toBrowserImage } from './image'
 import { PHOTO_BUCKET, supabase } from './supabase'
 import type { FlightInfo, HotelInfo, TravelDoc, Trip } from './types'
 
@@ -25,12 +25,7 @@ export async function uploadDocument(trip: Trip, file: File): Promise<{ doc: Tra
   if (isPdf) {
     aiFile = { base64: await blobToBase64(file), mime }
   } else {
-    let src: Blob = file
-    if (isHeic(file)) {
-      const { default: heic2any } = await import('heic2any')
-      const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 })
-      src = Array.isArray(out) ? out[0] : out
-    }
+    const src = await toBrowserImage(file)
     aiFile = await imageForAI(src, 1800)
     blob = await (await fetch(`data:image/jpeg;base64,${aiFile.base64}`)).blob()
     mime = 'image/jpeg'

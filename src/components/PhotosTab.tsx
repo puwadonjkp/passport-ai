@@ -70,6 +70,14 @@ export default function PhotosTab({ trip, photos, setPhotos, setTrip }: TripData
     setTrip({ ...trip, cover_photo_path: p.storage_path })
   }
 
+  async function removeNoGps() {
+    const list = photos.filter((p) => p.kind === 'photo' && p.lat == null)
+    if (!list.length || !confirm(`ลบ ${list.length} รูปที่ไม่มีข้อมูล GPS? (ลบแล้วอัปโหลดไฟล์ต้นฉบับใหม่ได้)`)) return
+    await deletePhotos(list)
+    const ids = new Set(list.map((p) => p.id))
+    setPhotos((ps) => ps.filter((p) => !ids.has(p.id)))
+  }
+
   async function remove(p: Photo) {
     if (!confirm('ลบรูปนี้ออกจากทริป?')) return
     await deletePhotos([p])
@@ -117,6 +125,11 @@ export default function PhotosTab({ trip, photos, setPhotos, setTrip }: TripData
           <button key={k} onClick={() => setFilter(k)} className={`chip !px-3.5 !py-1.5 text-sm ring-1 ${filter === k ? 'bg-espresso text-cream ring-espresso' : 'bg-white ring-cream-300'}`}>{l}</button>
         ))}
         <span className="ml-auto flex items-center gap-1 text-xs text-ink-muted"><MapPin size={13} /> มี GPS {gpsCount}/{photoCount} รูป</span>
+        {gpsCount < photoCount && (
+          <button className="chip bg-white !px-3 !py-1.5 text-xs text-red-600 ring-1 ring-cream-300 hover:ring-red-300" onClick={removeNoGps}>
+            <Trash2 size={13} /> ลบ {photoCount - gpsCount} รูปที่ไม่มี GPS
+          </button>
+        )}
       </div>
 
       {visible.length === 0 ? (

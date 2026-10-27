@@ -18,27 +18,52 @@ function localIso(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-export function isHeic(file: File) {
-  return /\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type)
+/** ตรวจว่าเป็น HEIC จริงไหม จาก "เนื้อไฟล์" (ftyp box) ไม่ใช่จากนามสกุล —
+ * รูปจาก iPhone ที่ส่งผ่าน LINE/AirDrop/iCloud มักชื่อ .HEIC แต่ข้างในถูกแปลงเป็น JPEG แล้ว */
+export async function isHeic(file: Blob): Promise<boolean> {
+  const head = new Uint8Array(await file.slice(0, 12).arrayBuffer())
+  if (head[0] === 0xff && head[1] === 0xd8) return false // JPEG
+  if (head[0] === 0x89 && head[1] === 0x50) return false // PNG
+  const box = String.fromCharCode(...head.slice(4, 12))
+  return /^ftyp(heic|heix|hevc|hevx|heim|heis|mif1|msf1|avif)/.test(box)
 }
 
-export async function readExif(file: Blob) {
+/** แปลง HEIC -> JPEG ให้ Browser แสดง/ย่อได้ ถ้าไม่ใช่ HEIC จริง (หรือแปลงไม่ได้) ใช้ไฟล์เดิม */
+export async function toBrowserImage(file: Blob): Promise<Blob> {
+  if (!(await isHeic(file))) return file
   try {
-    const data = await exifr.parse(file, { gps: true, pick: ['DateTimeOriginal', 'CreateDate', 'ModifyDate', 'latitude', 'longitude'] })
-    const dt: Date | undefined = data?.DateTimeOriginal || data?.CreateDate || data?.ModifyDate
-    const lat = typeof data?.latitude === 'number' && isFinite(data.latitude) ? data.latitude : null
-    const lon = typeof data?.longitude === 'number' && isFinite(data.longitude) ? data.longitude : null
-    return { takenAt: dt instanceof Date && !isNaN(dt.getTime()) ? localIso(dt) : null, lat, lon }
-  } catch {
-    return { takenAt: null, lat: null, lon: null }
+    const { default: heic2any } = await import('heic2any')
+    const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 })
+    return Array.isArray(out) ? out[0] : out
+  } catch (e) {
+    // heic2any ปฏิเสธไฟล์ที่ Browser เปิดได้อยู่แล้ว -> ใช้ไฟล์เดิมได้เลย
+    if (/already browser readable/i.test(String((e as { message?: string })?.message ?? e))) return file
+    throw new Error('แปลงไฟล์ HEIC ไม่สำเร็จ ลองส่งออกเป็น JPG จากแอป Photos ก่อน')
   }
 }
 
-async function toDecodable(file: File): Promise<Blob> {
-  if (!isHeic(file)) return file
-  const { default: heic2any } = await import('heic2any')
-  const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 })
-  return Array.isArray(out) ? out[0] : out
+export async function readExif(file: Blob) {
+  let takenAt: string | null = null
+  let lat: number | null = null
+  let lon: number | null = null
+  try {
+    const data = await exifr.parse(file, { pick: ['DateTimeOriginal', 'CreateDate', 'ModifyDate'] })
+    const dt: Date | undefined = data?.DateTimeOriginal || data?.CreateDate || data?.ModifyDate
+    if (dt instanceof Date && !isNaN(dt.getTime())) takenAt = localIso(dt)
+  } catch {
+    /* ไม่มีวันที่ใน EXIF */
+  }
+  try {
+    // ต้องใช้ exifr.gps() — ถ้า pick แค่ latitude/longitude จะกรองแท็ก GPS ดิบที่ใช้คำนวณทิ้งไป
+    const gps = await exifr.gps(file)
+    if (gps && isFinite(gps.latitude) && isFinite(gps.longitude) && !(gps.latitude === 0 && gps.longitude === 0)) {
+      lat = gps.latitude
+      lon = gps.longitude
+    }
+  } catch {
+    /* ไม่มี GPS */
+  }
+  return { takenAt, lat, lon }
 }
 
 async function loadBitmap(blob: Blob): Promise<ImageBitmap | HTMLImageElement> {
@@ -74,7 +99,7 @@ function resize(src: ImageBitmap | HTMLImageElement, maxDim: number, quality: nu
 
 export async function prepareImage(file: File): Promise<PreparedImage> {
   const exif = await readExif(file) // อ่านจากไฟล์ต้นฉบับก่อนแปลง (การแปลงจะทำให้ EXIF หาย)
-  const decodable = await toDecodable(file)
+  const decodable = await toBrowserImage(file)
   const bmp = await loadBitmap(decodable)
   const full = await resize(bmp, 2000, 0.86)
   const thumb = await resize(bmp, 480, 0.8)
