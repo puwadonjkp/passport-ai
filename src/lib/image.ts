@@ -1,6 +1,7 @@
 // Agent 01 (ฝั่ง Browser): อ่าน EXIF (วันที่ + GPS) จากรูปจริง รองรับ HEIC จาก iPhone
 // แล้วย่อรูปเป็น JPEG ก่อนอัปโหลด เพื่อประหยัดพื้นที่ Storage และโหลดเร็ว
 import exifr from 'exifr'
+import { extractHeifExif } from './heifExif'
 
 export interface PreparedImage {
   full: Blob
@@ -28,26 +29,59 @@ export async function isHeic(file: Blob): Promise<boolean> {
   return /^ftyp(heic|heix|hevc|hevx|heim|heis|mif1|msf1|avif)/.test(box)
 }
 
-/** แปลง HEIC -> JPEG ให้ Browser แสดง/ย่อได้ ถ้าไม่ใช่ HEIC จริง (หรือแปลงไม่ได้) ใช้ไฟล์เดิม */
+/** แปลง HEIC -> JPEG ให้ Browser แสดง/ย่อได้ ลองตามลำดับ:
+ *  1) Browser เปิดเองได้ (Safari / iPhone) -> ใช้ไฟล์เดิม
+ *  2) heic-to (libheif รุ่นใหม่ รองรับ HEIC จาก iPhone รุ่นล่าสุด)
+ *  3) heic2any (libheif รุ่นเก่า) เป็นทางสำรองสุดท้าย */
 export async function toBrowserImage(file: Blob): Promise<Blob> {
   if (!(await isHeic(file))) return file
+  try {
+    const bmp = await createImageBitmap(file)
+    bmp.close()
+    return file
+  } catch {
+    /* Browser นี้เปิด HEIC เองไม่ได้ (Chrome/Edge/Firefox) */
+  }
+  const errors: string[] = []
+  try {
+    const { heicTo } = await import('heic-to')
+    return await heicTo({ blob: file, type: 'image/jpeg', quality: 0.9 })
+  } catch (e) {
+    errors.push(`heic-to: ${errMsg(e)}`)
+  }
   try {
     const { default: heic2any } = await import('heic2any')
     const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 })
     return Array.isArray(out) ? out[0] : out
   } catch (e) {
-    // heic2any ปฏิเสธไฟล์ที่ Browser เปิดได้อยู่แล้ว -> ใช้ไฟล์เดิมได้เลย
-    if (/already browser readable/i.test(String((e as { message?: string })?.message ?? e))) return file
-    throw new Error('แปลงไฟล์ HEIC ไม่สำเร็จ ลองส่งออกเป็น JPG จากแอป Photos ก่อน')
+    if (/already browser readable/i.test(errMsg(e))) return file
+    errors.push(`heic2any: ${errMsg(e)}`)
   }
+  throw new Error(`แปลง HEIC ไม่สำเร็จ (${errors.join(' | ')})`)
+}
+
+function errMsg(e: unknown) {
+  if (e instanceof Error) return e.message
+  if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message)
+  return String(e)
 }
 
 export async function readExif(file: Blob) {
   let takenAt: string | null = null
   let lat: number | null = null
   let lon: number | null = null
+  // HEIC: ดึงก้อน TIFF/EXIF ออกมาเองก่อน เพราะ exifr อ่าน EXIF จาก HEIC รุ่นใหม่ไม่ได้
+  let source: Blob | Uint8Array = file
+  if (await isHeic(file)) {
+    try {
+      const tiff = extractHeifExif(await file.arrayBuffer())
+      if (tiff) source = tiff
+    } catch {
+      /* ใช้ไฟล์เดิมให้ exifr ลองเอง */
+    }
+  }
   try {
-    const data = await exifr.parse(file, { pick: ['DateTimeOriginal', 'CreateDate', 'ModifyDate'] })
+    const data = await exifr.parse(source, { pick: ['DateTimeOriginal', 'CreateDate', 'ModifyDate'] })
     const dt: Date | undefined = data?.DateTimeOriginal || data?.CreateDate || data?.ModifyDate
     if (dt instanceof Date && !isNaN(dt.getTime())) takenAt = localIso(dt)
   } catch {
@@ -55,7 +89,7 @@ export async function readExif(file: Blob) {
   }
   try {
     // ต้องใช้ exifr.gps() — ถ้า pick แค่ latitude/longitude จะกรองแท็ก GPS ดิบที่ใช้คำนวณทิ้งไป
-    const gps = await exifr.gps(file)
+    const gps = await exifr.gps(source)
     if (gps && isFinite(gps.latitude) && isFinite(gps.longitude) && !(gps.latitude === 0 && gps.longitude === 0)) {
       lat = gps.latitude
       lon = gps.longitude

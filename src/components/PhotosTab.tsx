@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { ChevronLeft, ChevronRight, ImageUp, MapPin, MapPinOff, Star, Trash2, X } from 'lucide-react'
 import { addDays, dayNumber, fmtDate } from '../lib/format'
+import { readExif } from '../lib/image'
 import { deletePhotos, uploadPhoto } from '../lib/photos'
 import { upsertRow } from '../lib/rows'
 import { publicUrl, supabase } from '../lib/supabase'
@@ -11,7 +12,7 @@ import { Empty, Spinner } from './ui'
 type Filter = 'all' | 'highlight' | 'receipt'
 
 export default function PhotosTab({ trip, photos, setPhotos, setTrip }: TripData) {
-  const [queue, setQueue] = useState<{ done: number; total: number; failed: string[] } | null>(null)
+  const [queue, setQueue] = useState<{ done: number; total: number; skipped: number; failed: string[] } | null>(null)
   const [drag, setDrag] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [viewer, setViewer] = useState<number | null>(null)
@@ -38,13 +39,24 @@ export default function PhotosTab({ trip, photos, setPhotos, setTrip }: TripData
   async function handleFiles(list: FileList | File[]) {
     const files = [...list].filter((f) => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name))
     if (!files.length) return
-    const state = { done: 0, total: files.length, failed: [] as string[] }
+    const state = { done: 0, total: files.length, skipped: 0, failed: [] as string[] }
     setQueue({ ...state })
+    // กันรูปซ้ำ: ชื่อไฟล์ + เวลาถ่ายตรงกับรูปที่มีในทริปแล้ว = ข้าม (อัปทั้งโฟลเดอร์ซ้ำได้โดยไม่ต้องกลัว)
+    const existing = new Set(photos.map((p) => `${p.original_name}|${p.taken_at ?? ''}`))
     let i = 0
     const worker = async () => {
       while (i < files.length) {
         const f = files[i++]
         try {
+          const { takenAt } = await readExif(f)
+          const key = `${f.name}|${takenAt ?? ''}`
+          if (existing.has(key)) {
+            state.skipped++
+            state.done++
+            setQueue({ ...state })
+            continue
+          }
+          existing.add(key)
           const photo = await uploadPhoto(trip, f)
           setPhotos((ps) => upsertRow(ps, photo).sort((a, b) => (a.taken_at ?? '9').localeCompare(b.taken_at ?? '9')))
         } catch (e) {
@@ -112,7 +124,7 @@ export default function PhotosTab({ trip, photos, setPhotos, setTrip }: TripData
       {queue && (
         <div className="card p-4">
           <div className="flex items-center justify-between text-sm">
-            <span className="flex items-center gap-2 font-medium">{queue.done < queue.total && <Spinner size={15} />} อัปโหลด {queue.done}/{queue.total} รูป</span>
+            <span className="flex items-center gap-2 font-medium">{queue.done < queue.total && <Spinner size={15} />} อัปโหลด {queue.done}/{queue.total} รูป{queue.skipped > 0 && <span className="text-ink-muted"> · ข้ามรูปที่มีแล้ว {queue.skipped}</span>}{queue.done === queue.total && queue.failed.length > 0 && <span className="text-red-600"> · ไม่สำเร็จ {queue.failed.length}</span>}</span>
             {queue.done === queue.total && <button className="text-ink-muted" onClick={() => setQueue(null)}><X size={16} /></button>}
           </div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-cream-200"><div className="h-full rounded-full bg-ember transition-all" style={{ width: `${(queue.done / queue.total) * 100}%` }} /></div>
