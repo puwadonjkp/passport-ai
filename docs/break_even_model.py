@@ -30,19 +30,21 @@ aic = lambda p: p['chats']*CHAT + p['gens']*PASSPORT + CAPTIONS + p['docs']*DOC
 gb = lambda p: p['photos']*MB/1024
 PAY_FEE = 0.5*0.0365*1.07 + 0.5*0.0165*1.07
 MIX199, FREE_RATIO, MONTHS = 0.4, 5, 12
+FREE_KEEP_MONTHS = 2   # ทริปฟรีลบรูปหลัง 60 วัน
+DOMAIN_THB_YEAR, WITHDRAW_THB_MONTH = 500, 30
 
 def month(paid):
     n149, n199, nfree = paid*(1-MIX199), paid*MIX199, paid*FREE_RATIO
     rev = n149*149 + n199*199
     v_ai = (n149*aic(PKG['p149']) + n199*aic(PKG['p199']) + nfree*aic(PKG['free']))*FX
     fee = rev*PAY_FEE
-    stored = (n149*gb(PKG['p149']) + n199*gb(PKG['p199']) + nfree*gb(PKG['free']))*MONTHS
+    stored = (n149*gb(PKG['p149']) + n199*gb(PKG['p199']))*MONTHS + nfree*gb(PKG['free'])*FREE_KEEP_MONTHS
     stor = max(0, stored-100)*0.021*FX
     eg = n149*PKG['p149']['eg'] + n199*PKG['p199']['eg'] + nfree*PKG['free']['eg']
     egr = max(0, eg-250)*0.09*FX
     compute = 0 if paid <= 100 else (5 if paid <= 600 else 50)
     geo = 0 if paid <= 1500 else 49        # แคชกลาง + LocationIQ ฟรี 5,000/วัน
-    fixed = (25 + compute + geo + 15/12)*FX
+    fixed = (25 + compute + geo)*FX + DOMAIN_THB_YEAR/12 + WITHDRAW_THB_MONTH
     cost = v_ai + fee + stor + egr + fixed
     return rev, cost, rev-cost
 
@@ -91,7 +93,7 @@ _, cost_be, _ = month(be)
 ax = axes[0]
 ax.axvline(be, color=INK2, linewidth=0.9, linestyle=(0, (1, 0)), alpha=0.5)
 ax.plot([be], [0], 'o', color=INK, markersize=9, markeredgecolor=SURF, markeredgewidth=2, zorder=6)
-ax.annotate(f'คุ้มทุนที่ ~{be:.1f} ทริป → ขั้นต่ำ 7 ทริป/เดือน\nต้นทุนคงที่ {month(0)[1]:,.0f} บาท/เดือน (Supabase Pro + โดเมน)', (be, 0), xytext=(14, -58),
+ax.annotate(f'คุ้มทุนที่ ~{be:.1f} ทริป → ขั้นต่ำ 7 ทริป/เดือน\nต้นทุนคงที่ {month(0)[1]:,.0f} บาท/เดือน (Supabase Pro + โดเมน + ถอนเงิน)', (be, 0), xytext=(14, -58),
             textcoords='offset points', fontsize=12, color=INK, fontweight='bold',
             arrowprops=dict(arrowstyle='-', color=INK2, linewidth=0.9))
 ax.fill_between(xs, P, 0, where=[p < 0 for p in P], color=C_COST, alpha=0.10, linewidth=0)
@@ -111,14 +113,14 @@ axes[1].annotate('600+ ทริป: อัปเกรดเซิร์ฟเ�
                  arrowprops=dict(arrowstyle='-', color=INK2, linewidth=0.8))
 
 fig.suptitle('Passport AI — รายรับ รายจ่าย และกำไร ต่อเดือน', x=0.06, y=0.995, ha='left', fontsize=21, fontweight='bold', color=INK)
-fig.text(0.06, 0.925, 'ราคา 149 / 199 บาทต่อทริป (สัดส่วน 60:40) · ผู้ใช้ฟรี 5 ทริปต่อ 1 ทริปที่จ่าย · AI = Gemini 3.5 Flash-Lite · '
-         'รวม Supabase Pro, ค่าเก็บรูปสะสม 12 เดือน, egress, ค่าธรรมเนียมรับเงิน · ไม่รวมค่าแรง/การตลาด/ภาษี',
+fig.text(0.06, 0.945, 'ราคา 149 / 199 บาทต่อทริป (สัดส่วน 60:40) · ผู้ใช้ฟรี 5 ทริปต่อ 1 ทริปที่จ่าย (ลบรูปหลัง 60 วัน) · AI = Gemini 3.5 Flash-Lite\n'
+         'รวม Supabase Pro + โดเมน + ค่าถอนเงิน, ค่าเก็บรูปสะสม 12 เดือน, egress, ค่าธรรมเนียมรับเงิน · ไม่รวมค่าแรง/การตลาด/ภาษี', va='top', linespacing=1.25,
          ha='left', fontsize=11, color=INK2)
 # legend (สำหรับ >= 2 series)
 from matplotlib.lines import Line2D
 handles = [Line2D([0], [0], color=c, linewidth=3) for c in (C_REV, C_COST, C_PROF)]
 fig.legend(handles, ['รายรับ', 'รายจ่าย', 'กำไร'], loc='upper right', bbox_to_anchor=(0.985, 0.995), ncol=3, frameon=False, fontsize=12.5, labelcolor=INK)
-fig.subplots_adjust(left=0.06, right=0.97, top=0.84, bottom=0.1)
+fig.subplots_adjust(left=0.06, right=0.97, top=0.80, bottom=0.1)
 fig.savefig(OUT, facecolor=SURF)
 
 print('\nตาราง:')
