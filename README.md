@@ -65,12 +65,15 @@ legacy/                     Streamlit app_v022.py เวอร์ชันเด
    - `VITE_SUPABASE_ANON_KEY` = Publishable (anon) key
 3. Push เข้า `main` → เว็บจะขึ้นที่ `https://<username>.github.io/passport-ai/`
 
-### รันในเครื่อง
+### รันในเครื่อง (ต้องมี Node.js 20 ขึ้นไป)
 ```bash
-cp .env.example .env.local   # ใส่ค่า Supabase
+git clone https://github.com/puwadonjkp/passport-ai.git
+cd passport-ai
 npm install
-npm run dev                  # http://localhost:5173/passport-ai/
+npm run dev                  # เปิด http://localhost:5173/passport-ai/
 ```
+ไม่ต้องตั้งค่าอะไรเพิ่ม: ไฟล์ `.env` ใน repo ชี้ไปที่ฐานข้อมูล Supabase ตัวจริงของโปรเจกต์อยู่แล้ว
+(ถ้าจะใช้ Supabase ของตัวเอง ให้คัดลอก `.env.example` เป็น `.env.local` แล้วใส่ค่าใหม่)
 
 ## 🔒 ความปลอดภัย
 - ทุกตารางเปิด RLS — ผู้ใช้เห็นเฉพาะข้อมูลของตัวเอง, trigger กันการผูกข้อมูลเข้าทริปของคนอื่น
