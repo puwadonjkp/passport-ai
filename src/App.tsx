@@ -9,7 +9,8 @@ import Dashboard from './pages/Dashboard'
 import TripPage from './pages/TripPage'
 import PublicPassport from './pages/PublicPassport'
 import ResetPassword from './pages/ResetPassword'
-import JoinPage, { PENDING_JOIN_KEY } from './pages/JoinPage'
+import JoinPage from './pages/JoinPage'
+import { getPendingJoin } from './lib/pendingJoin'
 
 function Private({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
@@ -23,7 +24,7 @@ function PublicOnly({ children }: { children: ReactNode }) {
   if (loading) return <FullScreenLoader />
   if (session) {
     // ถ้ามาจากลิงก์ชวนเพื่อนก่อนล็อกอิน ให้กลับไปหน้าเข้าร่วมทริป
-    const pending = sessionStorage.getItem(PENDING_JOIN_KEY)
+    const pending = getPendingJoin()
     if (pending) return <Navigate to={`/join/${pending}`} replace />
     return <Navigate to="/trips" replace />
   }

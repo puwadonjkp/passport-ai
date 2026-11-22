@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { nameTaken } from '../lib/settle'
+import { clearPendingJoin, setPendingJoin } from '../lib/pendingJoin'
 import type { Member } from '../lib/types'
 import { fmtRange } from '../lib/format'
 import { useAuth } from '../context/AuthContext'
@@ -19,7 +20,6 @@ interface Preview {
   already_member: boolean
 }
 
-export const PENDING_JOIN_KEY = 'pai_pending_join'
 
 export default function JoinPage() {
   const { code = '' } = useParams()
@@ -37,14 +37,14 @@ export default function JoinPage() {
 
   useEffect(() => {
     if (!session) return
-    sessionStorage.removeItem(PENDING_JOIN_KEY)
+    clearPendingJoin()
     supabase.rpc('trip_invite_preview', { code }).then(({ data }) => setPreview(((data as Preview[]) ?? [])[0] ?? null))
   }, [session, code])
 
   if (loading) return <FullScreenLoader />
   if (!session) {
     // ยังไม่ได้ล็อกอิน: จำรหัสเชิญไว้ แล้วพากลับมาหน้านี้หลังล็อกอิน/สมัครเสร็จ
-    sessionStorage.setItem(PENDING_JOIN_KEY, code)
+    setPendingJoin(code)
     return <Navigate to="/login" replace />
   }
   if (preview === undefined) return <FullScreenLoader />

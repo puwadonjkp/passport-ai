@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import './index.css'
 import App from './App'
 import { isConfigured, supabase } from './lib/supabase'
+import { getPendingJoin } from './lib/pendingJoin'
 
 // ลิงก์ยืนยันอีเมลจาก Supabase จะกลับมาพร้อม token ใน "#access_token=..." ซึ่งชนกับ HashRouter (#/...)
 // จึงให้ Supabase อ่าน token ให้เสร็จก่อน แล้วค่อยเปลี่ยน URL ไปหน้าที่ถูกต้อง ก่อนเริ่มแสดงผลแอป
@@ -17,7 +18,10 @@ async function handleAuthRedirect() {
   } else if ((/access_token=|refresh_token=/.test(hash) || /[?&]code=/.test(window.location.search)) && isConfigured) {
     const recovery = /type=recovery/.test(hash)
     await supabase.auth.getSession()
-    history.replaceState(null, '', window.location.pathname + (recovery ? '#/reset-password' : '#/trips'))
+    // ยืนยันอีเมลเสร็จ: ถ้าเพื่อนสมัครมาจากลิงก์ชวน ให้กลับไปหน้าเข้าร่วมทริปเลย
+    const pending = getPendingJoin()
+    const next = recovery ? '#/reset-password' : pending ? `#/join/${pending}` : '#/trips'
+    history.replaceState(null, '', window.location.pathname + next)
   }
 }
 
