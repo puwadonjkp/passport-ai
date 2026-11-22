@@ -42,16 +42,27 @@ export function settle(balances: Balance[]): Transfer[] {
   return out
 }
 
-/** จับคู่ชื่อที่ AI ตอบมา กับสมาชิกจริง (ไม่สนตัวพิมพ์ใหญ่เล็ก/ช่องว่าง, ยอมให้ชื่อเป็นส่วนหนึ่งของกันและกัน) */
+/** ทำชื่อให้อยู่ในรูปเดียวกันก่อนเทียบ (ไม่สนตัวพิมพ์ใหญ่เล็ก/ช่องว่าง) */
+export const normName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, '')
+
+/** มีสมาชิกคนอื่นในทริปใช้ชื่อนี้อยู่แล้วหรือไม่ (ชื่อซ้ำทำให้น้องพาสแยกไม่ออกว่าใครจ่าย) */
+export function nameTaken(name: string, members: Member[], me: string) {
+  const n = normName(name)
+  return members.some((m) => m.user_id !== me && normName(m.display_name) === n)
+}
+
+/** จับคู่ชื่อที่ AI ตอบมา กับสมาชิกจริง: ตรงเป๊ะก่อน ถ้าไม่มีค่อยดูชื่อที่เป็นส่วนหนึ่งของกัน
+ *  ถ้าตรงได้หลายคน (กำกวม) คืน null เพื่อให้ระบบถือว่าคนพิมพ์เป็นคนจ่ายแทน ไม่เดาผิดคน */
 export function matchMember(name: string | null | undefined, members: Member[]): string | null {
   if (!name) return null
-  const n = name.trim().toLowerCase().replace(/\s+/g, '')
+  const n = normName(name)
   if (!n) return null
-  const exact = members.find((m) => m.display_name.toLowerCase().replace(/\s+/g, '') === n)
-  if (exact) return exact.user_id
-  const partial = members.find((m) => {
-    const d = m.display_name.toLowerCase().replace(/\s+/g, '')
+  const exact = members.filter((m) => normName(m.display_name) === n)
+  if (exact.length === 1) return exact[0].user_id
+  if (exact.length > 1) return null
+  const partial = members.filter((m) => {
+    const d = normName(m.display_name)
     return d.includes(n) || n.includes(d)
   })
-  return partial?.user_id ?? null
+  return partial.length === 1 ? partial[0].user_id : null
 }

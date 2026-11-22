@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, Copy, Crown, RefreshCw, Share2, X } from 'lucide-react'
+import { nameTaken } from '../lib/settle'
 import { supabase } from '../lib/supabase'
 import type { TripData } from '../pages/TripPage'
 import { Modal } from './ui'
@@ -23,7 +24,17 @@ export function Avatar({ name, size = 32, ring = false }: { name: string; size?:
 export default function MembersModal({ open, onClose, trip, members, me, isOwner, setTrip, setMembers }: TripData & { open: boolean; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
   const canShare = typeof navigator.share === 'function'
-  const [myName, setMyName] = useState(members.find((m) => m.user_id === me)?.display_name ?? '')
+  const currentName = members.find((m) => m.user_id === me)?.display_name ?? ''
+  const [myName, setMyName] = useState(currentName)
+  const [nameMsg, setNameMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // เติมชื่อปัจจุบันทุกครั้งที่เปิดหน้าต่าง (ตอน mount รายชื่อสมาชิกอาจยังโหลดไม่เสร็จ)
+  useEffect(() => {
+    if (open) {
+      setMyName(currentName)
+      setNameMsg(null)
+    }
+  }, [open, currentName])
   const link = trip.invite_code ? `${window.location.origin}${window.location.pathname}#/join/${trip.invite_code}` : ''
 
   async function copy() {
@@ -56,9 +67,12 @@ export default function MembersModal({ open, onClose, trip, members, me, isOwner
 
   async function rename() {
     const name = myName.trim()
-    if (!name) return
-    await supabase.from('trip_members').update({ display_name: name }).eq('trip_id', trip.id).eq('user_id', me)
+    if (!name) return setNameMsg({ ok: false, text: 'กรอกชื่อก่อนนะ' })
+    if (nameTaken(name, members, me)) return setNameMsg({ ok: false, text: `มีเพื่อนในทริปใช้ชื่อ "${name}" แล้ว ลองชื่ออื่นเพื่อให้น้องพาสแยกออกว่าใครจ่าย` })
+    const { error } = await supabase.from('trip_members').update({ display_name: name }).eq('trip_id', trip.id).eq('user_id', me)
+    if (error) return setNameMsg({ ok: false, text: error.message })
     setMembers((ms) => ms.map((m) => (m.user_id === me ? { ...m, display_name: name } : m)))
+    setNameMsg({ ok: true, text: `บันทึกแล้ว ✓ น้องพาสจะเรียกคุณว่า "${name}"` })
   }
 
   return (
@@ -93,9 +107,11 @@ export default function MembersModal({ open, onClose, trip, members, me, isOwner
       <div className="mt-6">
         <label className="label">ชื่อของคุณในทริปนี้ (ใช้ตอนบอก AI ว่าใครจ่าย)</label>
         <div className="flex gap-2">
-          <input className="input" value={myName} onChange={(e) => setMyName(e.target.value)} placeholder="เช่น ข้าวตัง" />
-          <button className="btn-dark" onClick={rename}>บันทึก</button>
+          <input className="input" value={myName} maxLength={30} placeholder="เช่น ข้าวตัง"
+            onChange={(e) => { setMyName(e.target.value); setNameMsg(null) }} onKeyDown={(e) => e.key === 'Enter' && rename()} />
+          <button className="btn-dark" onClick={rename} disabled={myName.trim() === currentName}>บันทึก</button>
         </div>
+        {nameMsg && <p className={`mt-2 text-sm ${nameMsg.ok ? 'text-lagoon-600' : 'text-red-600'}`}>{nameMsg.text}</p>}
         <p className="mt-2 text-xs text-ink-muted">💡 ในแชทพิมพ์ได้เลย เช่น “ไปป์จ่ายค่าแท็กซี่ 2,000 เยน” หรือ “ข้าวมันไก่ 120 บาท ของฉันคนเดียว”</p>
       </div>
     </Modal>
