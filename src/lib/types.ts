@@ -217,3 +217,25 @@ export interface PassportData {
   members?: { name: string; paid: number; share: number }[]
   settlement?: { from: string; to: string; amount: number }[]
 }
+
+/** คำเชิญที่ส่งถึงอีเมลของฉัน (จาก RPC my_invites) */
+export interface MyInvite {
+  id: string
+  trip_id: string
+  trip_name: string
+  destination: string | null
+  start_date: string
+  end_date: string
+  invited_by_name: string
+  member_count: number
+  created_at: string
+}
+
+/** คำเชิญที่ค้างอยู่ของทริป (สมาชิกทริปเห็น/ยกเลิกได้) */
+export interface TripInvite {
+  id: string
+  trip_id: string
+  email: string
+  invited_by: string
+  created_at: string
+}

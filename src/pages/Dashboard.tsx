@@ -8,6 +8,7 @@ import type { Trip } from '../lib/types'
 import { useAuth } from '../context/AuthContext'
 import { Empty, Spinner, Stamp, TopBar } from '../components/ui'
 import TripFormModal from '../components/TripFormModal'
+import InviteCards from '../components/InviteCards'
 
 export default function Dashboard() {
   const { displayName } = useAuth()
@@ -78,6 +79,8 @@ export default function Dashboard() {
             {ongoing[0] && <Link className="btn bg-white/10 text-cream hover:bg-white/20" to={`/trips/${ongoing[0].id}/chat`}>💬 จดรายจ่ายทริปปัจจุบัน</Link>}
           </div>
         </section>
+
+        <InviteCards />
 
         <h2 className="mb-4 mt-10 text-2xl font-bold">ทริปของฉัน</h2>
         {trips === null ? (

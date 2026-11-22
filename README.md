@@ -33,7 +33,7 @@
 | **🖼️ คลังรูป** | อัปโหลดทีละหลายร้อยรูป รองรับ HEIC จาก iPhone · อ่านวันเวลา + GPS จาก EXIF · จัดกลุ่มตามวัน · ติดดาวไฮไลต์ · ตั้งรูปปก · ข้ามรูปซ้ำอัตโนมัติ |
 | **✈️ ตั๋ว / ที่พัก** | อัปโหลด Boarding Pass / E-Ticket / ใบจองโรงแรม (รูปหรือ PDF) → AI อ่านเที่ยวบิน เวลา ที่นั่ง ชื่อโรงแรม วันเช็คอิน และราคา · บันทึกราคาเป็นรายจ่ายได้ในคลิกเดียว · แนะนำปรับวันทริปตามตั๋ว · กรอกเองได้ |
 | **💰 ค่าใช้จ่าย** | สรุปรายหมวด รายวัน เทียบงบ · แก้ไข / ลบ / เพิ่มเอง · Export CSV |
-| **👥 ทริปร่วมกับเพื่อน** | ชวนเพื่อนด้วยลิงก์ · ทุกคนแชท จดรายจ่าย อัปรูปในทริปเดียวกันแบบ realtime · บอก AI ได้ว่า “ไปป์จ่ายค่าแท็กซี่” · สรุป **ใครต้องโอนให้ใคร** แบบโอนน้อยครั้งที่สุด |
+| **👥 ทริปร่วมกับเพื่อน** | ชวนเพื่อนด้วยลิงก์ หรือ **เชิญด้วยอีเมล** (เพื่อนเห็นคำเชิญรอในหน้า “ทริปของฉัน” แล้วตั้งชื่อตัวเองก่อนกดเข้าร่วม) · ทุกคนแชท จดรายจ่าย อัปรูปในทริปเดียวกันแบบ realtime · บอก AI ได้ว่า “ไปป์จ่ายค่าแท็กซี่” · สรุป **ใครต้องโอนให้ใคร** แบบโอนน้อยครั้งที่สุด |
 | **🛂 Passport** | Agent 5 ตัวสร้างหน้า Passport: ปก, Day cards, แผนที่เส้นทาง + ฟิลเตอร์รายวัน, ตราประทับเมือง, ข้อมูลเที่ยวบิน/ที่พัก, เรื่องเล่า, รูปไฮไลต์ + แคปชัน AI, Travel Intelligence, สรุปหารเงิน · แชร์ลิงก์สาธารณะ หรือพิมพ์เป็น PDF |
 
 ### Agent ทั้ง 5 (ตามสไลด์นำเสนอ)
@@ -80,6 +80,7 @@ src/
 supabase/
   migrations/001_init.sql                   ตารางหลัก + RLS + Storage bucket
   migrations/002_shared_trips_documents.sql สมาชิกทริป, ลิงก์ชวน, หารเงิน, เอกสารเดินทาง, Realtime
+  migrations/003_trip_invites.sql           เชิญเพื่อนด้วยอีเมล (คำเชิญรอในแอป)
   functions/ai/index.ts                     Edge Function เรียก Gemini/Claude (chat, story, caption, document)
 docs/
   break-even-chart.png, break_even_model.py กราฟและโมเดลคำนวณจุดคุ้มทุน (Business Plan)
@@ -92,7 +93,7 @@ legacy/                                     Streamlit app_v022.py เวอร�
 
 ### 1) Supabase
 1. สร้างโปรเจกต์ที่ [supabase.com](https://supabase.com)
-2. **SQL Editor** → รัน `supabase/migrations/001_init.sql` แล้วตามด้วย `002_shared_trips_documents.sql` ตามลำดับ
+2. **SQL Editor** → รัน `supabase/migrations/001_init.sql` แล้วตามด้วย `002_shared_trips_documents.sql` และ `003_trip_invites.sql` ตามลำดับ
 3. **Edge Functions** → Deploy function ชื่อ `ai` จาก `supabase/functions/ai/index.ts` (หรือ CLI: `supabase functions deploy ai`)
 4. **Edge Functions → Secrets** ใส่ key อย่างใดอย่างหนึ่ง:
    - `GEMINI_API_KEY` — ขอฟรีได้ที่ [aistudio.google.com/apikey](https://aistudio.google.com/apikey)

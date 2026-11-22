@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy, Crown, RefreshCw, Share2, X } from 'lucide-react'
+import { Check, Copy, Crown, Mail, RefreshCw, Share2, X } from 'lucide-react'
 import { nameTaken } from '../lib/settle'
 import { supabase } from '../lib/supabase'
+import type { TripInvite } from '../lib/types'
 import type { TripData } from '../pages/TripPage'
-import { Modal } from './ui'
+import { Modal, Spinner } from './ui'
 
 const AVATAR_COLORS = ['#E2622B', '#1F6F68', '#5B6BB5', '#E8A33D', '#B5527A', '#3E8E5B']
 
@@ -28,13 +29,47 @@ export default function MembersModal({ open, onClose, trip, members, me, isOwner
   const [myName, setMyName] = useState(currentName)
   const [nameMsg, setNameMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteMsg, setInviteMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [inviting, setInviting] = useState(false)
+  const [pending, setPending] = useState<TripInvite[]>([])
+
   // เติมชื่อปัจจุบันทุกครั้งที่เปิดหน้าต่าง (ตอน mount รายชื่อสมาชิกอาจยังโหลดไม่เสร็จ)
   useEffect(() => {
     if (open) {
       setMyName(currentName)
       setNameMsg(null)
+      setInviteMsg(null)
     }
   }, [open, currentName])
+
+  useEffect(() => {
+    if (!open) return
+    supabase.from('trip_invites').select('*').eq('trip_id', trip.id).order('created_at')
+      .then(({ data }) => setPending((data as TripInvite[]) ?? []))
+  }, [open, trip.id])
+
+  // เชิญด้วยอีเมล: ระบบตอบเหมือนกันไม่ว่าอีเมลนั้นมีบัญชีหรือไม่ (กันการใช้เช็คว่าใครเป็นสมาชิกเว็บ)
+  async function inviteByEmail() {
+    const email = inviteEmail.trim().toLowerCase()
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return setInviteMsg({ ok: false, text: 'รูปแบบอีเมลไม่ถูกต้อง' })
+    if (pending.some((p) => p.email === email)) return setInviteMsg({ ok: false, text: 'เชิญอีเมลนี้ไว้แล้ว รอเพื่อนตอบรับอยู่' })
+    setInviting(true)
+    const { error } = await supabase.rpc('invite_by_email', { p_trip: trip.id, p_email: email })
+    setInviting(false)
+    if (error) {
+      return setInviteMsg({ ok: false, text: /too many/i.test(error.message) ? 'มีคำเชิญค้างเยอะเกินไป (สูงสุด 30) ยกเลิกบางอันก่อนนะ' : error.message })
+    }
+    const { data } = await supabase.from('trip_invites').select('*').eq('trip_id', trip.id).order('created_at')
+    setPending((data as TripInvite[]) ?? [])
+    setInviteEmail('')
+    setInviteMsg({ ok: true, text: `เชิญ ${email} แล้ว ✓ บอกเพื่อนให้เข้าเว็บด้วยอีเมลนี้ จะเห็นคำเชิญที่หน้า "ทริปของฉัน"` })
+  }
+
+  async function cancelInvite(inv: TripInvite) {
+    await supabase.from('trip_invites').delete().eq('id', inv.id)
+    setPending((ps) => ps.filter((p) => p.id !== inv.id))
+  }
   const link = trip.invite_code ? `${window.location.origin}${window.location.pathname}#/join/${trip.invite_code}` : ''
 
   async function copy() {
@@ -85,6 +120,29 @@ export default function MembersModal({ open, onClose, trip, members, me, isOwner
           <button className="btn-primary !px-4" onClick={copy}>{copied ? <Check size={16} /> : canShare ? <Share2 size={16} /> : <Copy size={16} />}{copied ? 'คัดลอกแล้ว' : 'ส่ง'}</button>
         </div>
         {isOwner && <button className="mt-3 flex items-center gap-1.5 text-xs text-cream/50 hover:text-cream" onClick={regenerate}><RefreshCw size={12} /> สร้างลิงก์ใหม่ (ยกเลิกลิงก์เดิม)</button>}
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-white p-4 ring-1 ring-cream-200">
+        <p className="flex items-center gap-2 font-semibold"><Mail size={16} className="text-ember" /> หรือเชิญด้วยอีเมล</p>
+        <p className="mt-1 text-xs text-ink-muted">เพื่อนจะเห็นคำเชิญเมื่อเข้าเว็บด้วยอีเมลนี้ (ยังไม่มีบัญชีก็สมัครทีหลังได้) ระบบยังไม่ส่งอีเมลแจ้ง ต้องบอกเพื่อนเอง</p>
+        <div className="mt-3 flex gap-2">
+          <input className="input !py-2" type="email" inputMode="email" autoComplete="off" placeholder="friend@gmail.com" value={inviteEmail}
+            onChange={(e) => { setInviteEmail(e.target.value); setInviteMsg(null) }} onKeyDown={(e) => e.key === 'Enter' && inviteByEmail()} />
+          <button className="btn-primary !px-4" onClick={inviteByEmail} disabled={inviting || !inviteEmail.trim()}>{inviting && <Spinner size={14} />} เชิญ</button>
+        </div>
+        {inviteMsg && <p className={`mt-2 text-sm ${inviteMsg.ok ? 'text-lagoon-600' : 'text-red-600'}`}>{inviteMsg.text}</p>}
+        {pending.length > 0 && (
+          <ul className="mt-3 space-y-1.5">
+            {pending.map((p) => (
+              <li key={p.id} className="flex items-center gap-2 rounded-xl bg-cream px-3 py-2 text-sm">
+                <Mail size={14} className="shrink-0 text-ink-muted" />
+                <span className="min-w-0 flex-1 truncate">{p.email}</span>
+                <span className="chip bg-saffron-100 text-ink-muted">รอตอบรับ</span>
+                <button className="p-1 text-ink-muted hover:text-red-600" title="ยกเลิกคำเชิญ" onClick={() => cancelInvite(p)}><X size={14} /></button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <h3 className="mb-2 mt-6 text-sm font-semibold text-ink-muted">สมาชิก {members.length} คน</h3>
